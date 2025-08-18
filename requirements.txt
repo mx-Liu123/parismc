@@ -1,0 +1,15 @@
+# Core dependencies
+numpy>=1.20.0
+scipy>=1.7.0
+scikit-learn>=1.0.0
+
+# Sampling methods library
+smt>=2.0.0
+
+# Progress bars
+tqdm>=4.62.0
+
+# Optional dependencies for enhanced functionality
+# Uncomment if needed:
+# matplotlib>=3.5.0  # For plotting
+# jupyter>=1.0.0     # For notebook support
