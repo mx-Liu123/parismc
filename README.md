@@ -152,9 +152,10 @@ If you use this software in your research, please cite:
 
 ```bibtex
 @software{parismc,
-  title={Paris Monte Carlo Sampler},
-  author={Your Name},
-  year={2024},
-  url={https://github.com/yourusername/parismc}
+  title={Parallel Adaptive Reweighting Importance Sampling (PARIS)},
+  author={Miaoxin Liu, Alvin J. K. Chua},
+  year={2025},
+  url={https://github.com/mx-Liu123/parismc}
 }
+
 ```
