@@ -1,17 +1,27 @@
-# Paris Monte Carlo Sampler
+# PARIS Monte Carlo Sampler
 
-An advanced Monte Carlo sampler with adaptive covariance and clustering capabilities for Bayesian inference and optimization problems.
+**An efficient adaptive importance sampler for high-dimensional multi-modal Bayesian inference.**
+
+PARIS (**Parallel Adaptive Reweighting Importance Sampling**) combines global exploration with local adaptation to tackle complex posteriors. The workflow is simple:
+
+1. **Global Initialization**: Start with a space-filling design (e.g. Latin Hypercube Sampling) to seed promising regions.
+2. **Adaptive Proposals**: Each seed runs its own importance sampling process, where the proposal is a Gaussian mixture centered on past weighted samples with covariance estimated from the local sample set.
+3. **Dynamic Reweighting**: All samples are reweighted against the evolving proposal mixture, ensuring unbiased estimates and self-correcting any early overweights.
+4. **Mode Clustering**: Parallel processes that converge to the same region are merged to avoid redundancy, while distinct modes are preserved.
+5. **Posterior & Evidence**: The collected weighted samples directly reconstruct the posterior and yield accurate Bayesian evidence estimates.
+
+This adaptive–parallel design allows PARIS to efficiently discover, refine, and integrate over complex multi-modal landscapes with minimal tuning and far fewer likelihood calls than conventional approaches.
 
 ## Features
 
-* **Adaptive Proposals**: Mixture proposals evolve around high-posterior regions while self-correcting overemphasis, ensuring stable coverage.
-* **Auto-balanced Exploration**: Samples adaptively shift between discovering new regions and refining known peaks, without manual tuning.
-* **Evidence Estimation Built-in**: Accurate Bayesian evidence comes directly from the same weighted samples used for posterior reconstruction.
-* **Parallel Mode Discovery**: Independent processes explore in parallel, merging when they converge on the same mode to reduce redundancy.
-* **Intuitive Hyperparameters**: Configuration maps naturally to prior knowledge (e.g., expected mode number, scale of prior volume), making it easy for users to fine-tune.
-* **Efficient Large-scale Performance**: Scales smoothly in high-dimensional, multi-modal spaces with substantially fewer likelihood calls.
-* **Robust Boundary Handling**: Parameters defined on the unit hypercube are automatically respected.
-* **Multiprocessing Ready**: Straightforward support for parallel execution on modern hardware.
+* **Adaptive Proposals per Seed** – Each process maintains its own proposal, evolving a local Gaussian mixture that adapts to past samples.
+* **Auto-balanced Exploration** – High-weight discoveries automatically attract more samples, while overweights self-correct over time.
+* **Accurate Evidence Estimation** – Bayesian evidence is computed directly from importance weights, no extra machinery needed.
+* **Parallel Mode Discovery** – Multiple seeds explore independently, merging only when they converge to the same mode.
+* **Intuitive Hyperparameters** – Settings like number of seeds, initial covariance, and merge thresholds map directly to prior knowledge.
+* **Efficiency at Scale** – Handles high-dimensional, multi-modal targets with substantially fewer likelihood calls.
+* **Boundary-safe** – Automatically respects \[0,1]^d priors.
+* **Multiprocessing Ready** – Runs smoothly across CPU cores for large inference tasks.
 
 ## Installation
 
@@ -162,5 +172,6 @@ If you use this software in your research, please cite:
 }
 
 ```
+
 
 
