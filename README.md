@@ -4,11 +4,14 @@ An advanced Monte Carlo sampler with adaptive covariance and clustering capabili
 
 ## Features
 
-- **Adaptive Covariance**: Automatically adjusts proposal covariance matrices based on sample history
-- **Intelligent Clustering**: Merges similar sampling chains to improve efficiency
-- **Boundary Handling**: Smart boundary constraints for parameters in [0,1]^d space
-- **Multiprocessing Support**: Optional parallel processing for large-scale problems
-- **Flexible Configuration**: Extensive customization options through SamplerConfig
+* **Auto-balanced Exploration**: Samples adaptively shift between discovering new regions and refining known peaks, without manual tuning.
+* **Evidence Estimation Built-in**: Accurate Bayesian evidence comes directly from the same weighted samples used for posterior reconstruction.
+* **Adaptive Proposals**: Mixture proposals evolve around high-posterior regions while self-correcting overemphasis, ensuring stable coverage.
+* **Parallel Mode Discovery**: Independent processes explore in parallel, merging when they converge on the same mode to reduce redundancy.
+* **Intuitive Hyperparameters**: Configuration maps naturally to prior knowledge (e.g., expected mode number, scale of prior volume), making it easy for users to fine-tune.
+* **Efficient Large-scale Performance**: Scales smoothly in high-dimensional, multi-modal spaces with substantially fewer likelihood calls.
+* **Robust Boundary Handling**: Parameters defined on the unit hypercube are automatically respected.
+* **Multiprocessing Ready**: Straightforward support for parallel execution on modern hardware.
 
 ## Installation
 
@@ -159,3 +162,4 @@ If you use this software in your research, please cite:
 }
 
 ```
+
