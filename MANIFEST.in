@@ -1,0 +1,38 @@
+# Include the README
+include README.md
+
+# Include the license
+include LICENSE
+
+# Include requirements
+include requirements.txt
+
+# Include all example files
+recursive-include examples *.py
+recursive-include examples *.md
+
+# Include any data files if you have them
+# recursive-include parismc/data *
+
+# Exclude unnecessary files
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *.so
+recursive-exclude * .DS_Store
+exclude .gitignore
+exclude .git
+recursive-exclude .git *
+
+# Include any additional documentation
+include *.rst
+include *.txt
+include *.md
+
+# Include setup files
+include setup.py
+include setup.cfg
+
+# Exclude build artifacts
+prune build
+prune dist
+prune *.egg-info
