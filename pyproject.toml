@@ -1,0 +1,105 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parismc"
+version = "0.1.0"
+authors = [
+    {name = "Miaoxin Liu", email = "mx.liu123@outlook.com"},
+    {name = "Alvin J. K. Chua"}
+]
+description = "PARIS: Parallel Adaptive Reweighting Importance Sampling for high-dimensional multi-modal Bayesian inference"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+keywords = ["monte carlo", "bayesian inference", "importance sampling", "multimodal", "adaptive sampling", "MCMC"]
+dependencies = [
+    "numpy>=1.20.0",
+    "scipy>=1.7.0",
+    "scikit-learn>=1.0.0",
+    "smt>=2.0.0",
+    "tqdm>=4.62.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov>=2.0",
+    "black>=22.0",
+    "flake8>=4.0",
+    "isort>=5.0",
+]
+plotting = [
+    "matplotlib>=3.5.0",
+    "seaborn>=0.11.0",
+]
+notebook = [
+    "jupyter>=1.0.0",
+    "ipython>=7.0.0",
+]
+full = [
+    "matplotlib>=3.5.0",
+    "seaborn>=0.11.0",
+    "jupyter>=1.0.0",
+    "ipython>=7.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/mx-Liu123/parismc"
+Repository = "https://github.com/mx-Liu123/parismc"
+Documentation = "https://github.com/mx-Liu123/parismc/blob/main/README.md"
+"Bug Reports" = "https://github.com/mx-Liu123/parismc/issues"
+
+[tool.setuptools.packages.find]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.txt", "*.md"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["parismc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --cov=parismc --cov-report=term-missing"
