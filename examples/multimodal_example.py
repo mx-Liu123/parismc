@@ -381,7 +381,7 @@ def main():
     
     # Problem setup
     ndim = 10
-    n_seed = 30  # Number of walkers/chains
+    n_seed = 100  # Number of initial walkers/chains
     sigma = 0.01  # Initial covariance scale
     savepath = './multimodal_results/'
     
@@ -466,4 +466,5 @@ def main():
     print("Example completed!")
 
 if __name__ == "__main__":
+
     main()
