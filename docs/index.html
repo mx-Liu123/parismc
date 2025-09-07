@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PARIS Monte Carlo Sampler</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .features {
+            display: grid;
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .feature-card {
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .code-block {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            margin: 15px 0;
+        }
+        .install-section {
+            background: #e8f4f8;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .nav-links {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .nav-links a {
+            display: inline-block;
+            margin: 0 15px;
+            padding: 10px 20px;
+            background: #007acc;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .nav-links a:hover {
+            background: #005999;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PARIS Monte Carlo Sampler</h1>
+        <p><strong>An efficient adaptive importance sampler for high-dimensional multi-modal Bayesian inference</strong></p>
+    </div>
+
+    <div class="nav-links">
+        <a href="#installation">Installation</a>
+        <a href="#quick-start">Quick Start</a>
+        <a href="#examples">Examples</a>
+        <a href="https://github.com/mx-Liu123/parismc">GitHub</a>
+    </div>
+
+    <section>
+        <h2>About PARIS</h2>
+        <p>PARIS (<strong>Parallel Adaptive Reweighting Importance Sampling</strong>) combines global exploration with local adaptation to tackle complex posteriors. The workflow is simple:</p>
+        
+        <ol>
+            <li><strong>Global Initialization</strong>: Start with a space-filling design (e.g. Latin Hypercube Sampling) to seed promising regions.</li>
+            <li><strong>Adaptive Proposals</strong>: Each seed runs its own importance sampling process, where the proposal is a Gaussian mixture centered on past weighted samples with covariance estimated from the local sample set.</li>
+            <li><strong>Dynamic Reweighting</strong>: All samples are reweighted against the evolving proposal mixture, ensuring unbiased estimates and self-correcting any early overweights.</li>
+            <li><strong>Mode Clustering</strong>: Parallel processes that converge to the same region are merged to avoid redundancy, while distinct modes are preserved.</li>
+            <li><strong>Posterior & Evidence</strong>: The collected weighted samples directly reconstruct the posterior and yield accurate Bayesian evidence estimates.</li>
+        </ol>
+    </section>
+
+    <section>
+        <h2>Key Features</h2>
+        <div class="features">
+            <div class="feature-card">
+                <h3>🎯 Adaptive Proposals per Seed</h3>
+                <p>Each process maintains its own proposal, evolving a local Gaussian mixture that adapts to past samples.</p>
+            </div>
+            <div class="feature-card">
+                <h3>⚖️ Auto-balanced Exploration</h3>
+                <p>High-weight discoveries automatically attract more samples, while overweights self-correct over time.</p>
+            </div>
+            <div class="feature-card">
+                <h3>📊 Accurate Evidence Estimation</h3>
+                <p>Bayesian evidence is computed directly from importance weights, no extra machinery needed.</p>
+            </div>
+            <div class="feature-card">
+                <h3>🚀 Parallel Mode Discovery</h3>
+                <p>Multiple seeds explore independently, merging only when they converge to the same mode.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="installation">
+        <h2>Installation</h2>
+        <div class="install-section">
+            <h3>From PyPI (when available)</h3>
+            <div class="code-block">pip install parismc</div>
+            
+            <h3>From Source</h3>
+            <div class="code-block">git clone https://github.com/mx-Liu123/parismc.git
+cd parismc
+pip install -e .</div>
+        </div>
+    </section>
+
+    <section id="quick-start">
+        <h2>Quick Start</h2>
+        <div class="code-block">import numpy as np
+from parismc import Sampler, SamplerConfig
+
+# Define your log-likelihood function
+def log_likelihood(x):
+    """Example: multivariate Gaussian log-likelihood"""
+    return -0.5 * np.sum(x**2, axis=1)
+
+# Create sampler configuration
+config = SamplerConfig(
+    alpha=1000,
+    latest_prob_index=1000,
+    boundary_limiting=True,
+    use_pool=False  # Set to True for multiprocessing
+)
+
+# Initialize sampler
+ndim = 2
+n_walkers = 5
+init_cov_list = [np.eye(ndim) * 0.1] * n_walkers
+
+sampler = Sampler(
+    ndim=ndim,
+    n_seed=n_walkers,
+    log_reward_func=log_likelihood,
+    init_cov_list=init_cov_list,
+    config=config
+)
+
+# Prepare initial samples
+sampler.prepare_lhs_samples(lhs_num=1000, batch_size=100)
+
+# Run sampling
+sampler.run_sampling(num_iterations=500, savepath='./results')
+
+# Get results
+samples, weights = sampler.get_samples_with_weights(flatten=True)</div>
+    </section>
+
+    <section id="examples">
+        <h2>Examples</h2>
+        <p>Check out the example files in the repository:</p>
+        <ul>
+            <li><a href="https://github.com/mx-Liu123/parismc/blob/main/examples/basic_example.py">Basic Example</a></li>
+            <li><a href="https://github.com/mx-Liu123/parismc/blob/main/examples/multimodal_example.py">Multimodal Example</a></li>
+        </ul>
+    </section>
+
+    <section>
+        <h2>Requirements</h2>
+        <ul>
+            <li>Python >= 3.8</li>
+            <li>NumPy >= 1.20.0</li>
+            <li>SciPy >= 1.7.0</li>
+            <li>scikit-learn >= 1.0.0</li>
+            <li>smt >= 2.0.0</li>
+            <li>tqdm >= 4.62.0</li>
+        </ul>
+    </section>
+
+    <section>
+        <h2>Citation</h2>
+        <div class="code-block">@software{parismc,
+  title={Parallel Adaptive Reweighting Importance Sampling (PARIS)},
+  author={Miaoxin Liu, Alvin J. K. Chua},
+  year={2025},
+  url={https://github.com/mx-Liu123/parismc}
+}</div>
+    </section>
+
+    <footer style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee;">
+        <p>MIT License | <a href="https://github.com/mx-Liu123/parismc">GitHub Repository</a></p>
+    </footer>
+</body>
+</html>
