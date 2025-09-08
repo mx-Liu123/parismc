@@ -61,6 +61,31 @@ This adaptive–parallel design allows PARIS to efficiently discover, refine, an
 - **Beta correction** applied for boundary effects when >10% samples fall outside [0,1]^d
 - **OAS shrinkage** applied for robust covariance estimation with small samples
 
+## Performance
+
+### 10D Gaussian Mixture Model Benchmark
+
+PARIS demonstrates exceptional efficiency in high-dimensional, multi-modal scenarios. In a challenging 10D GMM with 10 equally weighted modes:
+
+| Method | Sample Number | Total Calls | Log Evidence |
+|--------|---------------|-------------|--------------|
+| **PARIS** | 145,420 | **150,050** | **2.30** |
+| Dynesty | 145,423 | 8,587,847 | 2.30 |
+| PTMCMC | 145,400 | 822,352 | 1.91 |
+
+**Key Results:**
+- **🚀 57× fewer likelihood evaluations** than Dynesty (Dynamic Nested Sampling)
+- **⚡ 5.5× fewer likelihood evaluations** than PTMCMC  
+- **🎯 Accurate evidence estimation** (2.30 vs theoretical 2.30)
+- **⚖️ Consistent mode recovery** across all dimensions
+- **📊 Robust performance** with N_LHS=10⁴, N_seed=100
+
+<div align="center">
+<img src="docs/images/GMM10D10M.png" alt="10D GMM Performance Comparison" width="600"/>
+</div>
+
+*Figure: 1D marginalized posterior comparison. PARIS (green) closely matches the analytical target distribution (grey), while competitors show mode recovery bias. The target distribution's uniform-like appearance in 1D projections results from LHS-based placement of GMM component centers ensuring maximal separation. PARIS achieves this accuracy with dramatically fewer likelihood evaluations.*
+
 ## Documentation
 
 📖 **[Visit the official documentation site](https://mx-liu123.github.io/parismc/)** for detailed usage guides, API reference, and examples.
