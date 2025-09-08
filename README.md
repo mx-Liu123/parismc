@@ -12,6 +12,10 @@ PARIS (**Parallel Adaptive Reweighting Importance Sampling**) combines global ex
 
 This adaptive–parallel design allows PARIS to efficiently discover, refine, and integrate over complex multi-modal landscapes with minimal tuning and far fewer likelihood calls than conventional approaches.
 
+## Documentation
+
+📖 **[Visit the official documentation site](https://mx-liu123.github.io/parismc/)** for detailed usage guides, API reference, and examples.
+
 ## Features
 
 * **Adaptive Proposals per Seed** – Each process maintains its own proposal, evolving a local Gaussian mixture that adapts to past samples.
