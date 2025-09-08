@@ -71,8 +71,10 @@
     </div>
 
     <div class="nav-links">
+        <a href="#algorithm">Algorithm</a>
         <a href="#installation">Installation</a>
         <a href="#quick-start">Quick Start</a>
+        <a href="#api-reference">API Reference</a>
         <a href="#examples">Examples</a>
         <a href="https://github.com/mx-Liu123/parismc">GitHub</a>
     </div>
@@ -88,6 +90,69 @@
             <li><strong>Mode Clustering</strong>: Parallel processes that converge to the same region are merged to avoid redundancy, while distinct modes are preserved.</li>
             <li><strong>Posterior & Evidence</strong>: The collected weighted samples directly reconstruct the posterior and yield accurate Bayesian evidence estimates.</li>
         </ol>
+    </section>
+
+    <section id="algorithm">
+        <h2>Algorithm</h2>
+        
+        <h3>PARIS Algorithm (Simplified Implementation)</h3>
+        
+        <h4>Initialization (T=1)</h4>
+        <ol>
+            <li><strong>Distribute N<sub>LHS</sub> LHS points</strong> across all prior regions</li>
+            <li><strong>Select N<sub>seed</sub> points</strong> with highest posterior as process initializations {x<sub>seed</sub><sup>(j)</sup>}<sub>j=1</sub><sup>N<sub>proc</sub></sup></li>
+            <li><strong>For each process</strong> x<sub>seed</sub><sup>(j)</sup> (j = 1, ..., N<sub>proc</sub>):
+                <ul>
+                    <li>3.1) Predefine proposal covariance Σ<sub>1</sub><sup>(j)</sup> = Σ<sub>init</sub></li>
+                    <li>3.2) Generate first sample: x<sub>1</sub><sup>(j)</sup> ~ N(x | x<sub>seed</sub><sup>(j)</sup>, Σ<sub>1</sub><sup>(j)</sup>)</li>
+                    <li>3.3) Initialize importance weight: w<sub>1</sub><sup>(j)</sup> = P(x<sub>1</sub><sup>(j)</sup>) / q<sub>1</sub><sup>(j)</sup>(x<sub>1</sub><sup>(j)</sup>)</li>
+                </ul>
+            </li>
+        </ol>
+
+        <h4>General Iteration (T > 1)</h4>
+        <ol>
+            <li><strong>For each process</strong> j = 1, ..., N<sub>proc</sub>:
+                <ul>
+                    <li>1.1) <strong>Compute weighted mean and covariance</strong>:</li>
+                </ul>
+                <div class="code-block">μ<sub>T</sub><sup>(j)</sup> = Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup> x<sub>t</sub><sup>(j)</sup> / Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup>
+
+Σ<sub>T</sub><sup>(j)</sup> = Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup> (x<sub>t</sub><sup>(j)</sup> - μ<sub>T</sub><sup>(j)</sup>)(x<sub>t</sub><sup>(j)</sup> - μ<sub>T</sub><sup>(j)</sup>)<sup>T</sup> / Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup></div>
+                <ul>
+                    <li>1.2) <strong>Define proposal</strong> as weighted Gaussian mixture:</li>
+                </ul>
+                <div class="code-block">q<sub>T</sub><sup>(j)</sup>(x) = Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup> N(x | x<sub>t</sub><sup>(j)</sup>, Σ<sub>T</sub><sup>(j)</sup>) / Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup></div>
+                <ul>
+                    <li>1.3) <strong>Choose component</strong> N(x | y<sub>T</sub><sup>(j)</sup>, Σ<sub>T</sub><sup>(j)</sup>) from q<sub>T</sub><sup>(j)</sup>(x)</li>
+                    <li>1.4) <strong>Draw new sample</strong> x<sub>T</sub><sup>(j)</sup> from N(x | y<sub>T</sub><sup>(j)</sup>, Σ<sub>T</sub><sup>(j)</sup>)</li>
+                    <li>1.5) <strong>Update past importance weights</strong> for t = 1, ..., T:</li>
+                </ul>
+                <div class="code-block">w<sub>t</sub><sup>(j)</sup> ← P(x<sub>t</sub><sup>(j)</sup>) / (1/T × Σ<sub>t'=1</sub><sup>T</sup> q<sub>t'</sub><sup>(j)</sup>(x<sub>t</sub><sup>(j)</sup>))</div>
+                <ul>
+                    <li>1.6) <strong>Save weighted samples</strong> and proposals at iteration T</li>
+                </ul>
+            </li>
+            <li><strong>Process Interaction</strong>:
+                <ul>
+                    <li>2.1) Initialize all processes as unvisited</li>
+                    <li>2.2) <strong>For each unvisited process</strong> mean μ<sub>T</sub><sup>(j)</sup>, find neighbors μ<sub>T</sub><sup>(j')</sup> satisfying:</li>
+                </ul>
+                <div class="code-block">R<sub>j'→j</sub> = √((μ<sub>T</sub><sup>(j')</sup> - μ<sub>T</sub><sup>(j)</sup>)<sup>T</sup> [Σ<sub>T</sub><sup>(j)</sup>]<sup>-1</sup> (μ<sub>T</sub><sup>(j')</sup> - μ<sub>T</sub><sup>(j)</sup>)) ≤ R<sub>m</sub></div>
+                <ul>
+                    <li>2.3) <strong>Form clusters</strong> of j and neighbors, mark as visited</li>
+                    <li>2.4) <strong>In each cluster</strong>, retain process with highest posterior max P(x<sub>T</sub><sup>(j)</sup>), terminate others</li>
+                </ul>
+            </li>
+        </ol>
+
+        <h4>Advanced Implementation Notes</h4>
+        <ul>
+            <li>Covariance matrices updated every <strong>γ iterations</strong> (practical version)</li>
+            <li>Truncation uses latest <strong>α samples</strong> for weighting calculations</li>
+            <li><strong>Beta correction</strong> applied for boundary effects when >10% samples fall outside [0,1]<sup>d</sup></li>
+            <li><strong>OAS shrinkage</strong> applied for robust covariance estimation with small samples</li>
+        </ul>
     </section>
 
     <section>
@@ -172,6 +237,116 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)</div>
         <ul>
             <li><a href="https://github.com/mx-Liu123/parismc/blob/main/examples/basic_example.py">Basic Example</a></li>
             <li><a href="https://github.com/mx-Liu123/parismc/blob/main/examples/multimodal_example.py">Multimodal Example</a></li>
+        </ul>
+    </section>
+
+    <section id="api-reference">
+        <h2>API Reference</h2>
+        
+        <h3>SamplerConfig</h3>
+        <p>Configuration dataclass containing all hyperparameters for the sampler.</p>
+        
+        <div class="code-block">from parismc import SamplerConfig
+
+config = SamplerConfig(
+    proc_merge_prob=0.9,
+    alpha=1000,
+    latest_prob_index=1000,
+    trail_size=1000,
+    boundary_limiting=True,
+    use_beta=True,
+    integral_num=100000,
+    gamma=100,
+    exclude_scale_z=np.inf,
+    use_pool=False,
+    n_pool=10
+)</div>
+
+        <h4>Parameters</h4>
+        <ul>
+            <li><strong>proc_merge_prob</strong> (float, default=0.9): <em>Paper: R<sub>m</sub></em> - Distance criteria for merging nearby seeds. Implemented as probability threshold (0.9) corresponding to 90% probability mass for process merging decisions.</li>
+            <li><strong>alpha</strong> (int, default=1000): <em>Paper: α</em> - Truncation parameter, considering only the latest α iterations' samples for importance weight calculations. Controls temporal locality in proposal adaptation.</li>
+            <li><strong>latest_prob_index</strong> (int, default=1000): <em>Equivalent to α</em> - Number of most recent samples used for probability weighting calculations. Redundant parameter matching alpha value.</li>
+            <li><strong>trail_size</strong> (int, default=1000): <em>Paper: MaxResample</em> - Maximum number of attempts after rejecting an invalid sample during boundary-constrained sampling.</li>
+            <li><strong>boundary_limiting</strong> (bool, default=True): <em>Paper: Always True</em> - Enable boundary constraint handling for [0,1]<sup>d</sup> unit cube. Essential for proper sampling within parameter bounds.</li>
+            <li><strong>use_beta</strong> (bool, default=True): <em>Paper: Beta correction</em> - Apply beta correction for boundary truncation effects when >10% samples fall outside [0,1]<sup>d</sup>. Part of advanced covariance estimation.</li>
+            <li><strong>integral_num</strong> (int, default=100000): <em>Paper: 10<sup>5</sup> MC samples</em> - Number of Monte Carlo samples used for beta coefficient estimation in boundary correction. Higher values improve accuracy.</li>
+            <li><strong>gamma</strong> (int, default=100): <em>Paper: γ</em> - Frequency of covariance matrix updates (in iterations). In practice, proposal covariance Σ<sub>T</sub><sup>(j)</sup> updated every γ iterations rather than every iteration.</li>
+            <li><strong>exclude_scale_z</strong> (float, default=inf): <em>Not in paper experiments</em> - Exclusion scale for outlier detection. Samples beyond this many standard deviations excluded from covariance updates. Set to ∞ (disabled) in paper.</li>
+            <li><strong>use_pool</strong> (bool, default=False): <em>Computational</em> - Enable multiprocessing for parallel likelihood evaluations. Not part of algorithmic specification.</li>
+            <li><strong>n_pool</strong> (int, default=10): <em>Computational</em> - Number of parallel processes when multiprocessing enabled. Implementation detail for computational efficiency.</li>
+        </ul>
+
+        <h3>Sampler</h3>
+        <p>Main sampling class implementing adaptive importance sampling with clustering.</p>
+        
+        <div class="code-block">sampler = Sampler(
+    ndim=2,
+    n_seed=5,
+    log_reward_func=log_likelihood,
+    init_cov_list=[np.eye(2) * 0.1] * 5,
+    prior_transform=None,
+    config=config
+)</div>
+
+        <h4>Constructor Parameters</h4>
+        <ul>
+            <li><strong>ndim</strong> (int): Dimensionality of the parameter space.</li>
+            <li><strong>n_seed</strong> (int): Number of initial seed points (walkers) for parallel exploration.</li>
+            <li><strong>log_reward_func</strong> (callable): Function computing log rewards/likelihoods. Must accept numpy array of shape (N, ndim) and return array of shape (N,).</li>
+            <li><strong>init_cov_list</strong> (list): List of initial covariance matrices (ndim × ndim) for each walker.</li>
+            <li><strong>prior_transform</strong> (callable, optional): Function transforming from unit cube [0,1]^d to parameter space. If None, assumes unit cube sampling.</li>
+            <li><strong>config</strong> (SamplerConfig, optional): Configuration object. Uses defaults if not provided.</li>
+        </ul>
+
+        <h4>Key Methods</h4>
+        
+        <h5>prepare_lhs_samples(lhs_num, batch_size)</h5>
+        <p>Initialize the sampler with Latin Hypercube Sampling.</p>
+        <ul>
+            <li><strong>lhs_num</strong> (int): Total number of initial samples to generate.</li>
+            <li><strong>batch_size</strong> (int): Size of batches for likelihood evaluation.</li>
+        </ul>
+
+        <h5>run_sampling(num_iterations, savepath, print_iter=1)</h5>
+        <p>Execute the main sampling loop.</p>
+        <ul>
+            <li><strong>num_iterations</strong> (int): Number of sampling iterations to run.</li>
+            <li><strong>savepath</strong> (str): Directory path for saving intermediate results.</li>
+            <li><strong>print_iter</strong> (int, optional): Print progress every N iterations.</li>
+        </ul>
+
+        <h5>get_samples_with_weights(flatten=False)</h5>
+        <p>Retrieve samples and their importance weights.</p>
+        <ul>
+            <li><strong>flatten</strong> (bool): If True, return flattened arrays. If False, return lists of arrays per walker.</li>
+            <li><strong>Returns</strong>: Tuple of (samples, weights) - either as lists or flattened arrays.</li>
+        </ul>
+
+        <h5>save_state(filename=None) / load_state(filename)</h5>
+        <p>Save/load sampler state for resuming interrupted runs.</p>
+        <ul>
+            <li><strong>filename</strong> (str): Path to save/load state file.</li>
+        </ul>
+
+        <h3>Utility Functions</h3>
+        
+        <h4>find_sigma_level(ndim, prob)</h4>
+        <p>Compute sigma level for a given confidence probability in ndim space.</p>
+        <ul>
+            <li><strong>ndim</strong> (int): Dimensionality of the space.</li>
+            <li><strong>prob</strong> (float): Confidence probability (0-1).</li>
+            <li><strong>Returns</strong>: Sigma level corresponding to the probability.</li>
+        </ul>
+
+        <h4>oracle_approximating_shrinkage()</h4>
+        <p>Covariance regularization using oracle approximating shrinkage estimator.</p>
+
+        <h4>Weighting Functions</h4>
+        <ul>
+            <li><strong>weighting_seeds_manypoint()</strong>: Compute importance weights for multiple points against multiple proposal means.</li>
+            <li><strong>weighting_seeds_manycov()</strong>: Compute weights using multiple covariance matrices.</li>
+            <li><strong>weighting_seeds_onepoint_with_onemean()</strong>: Compute weights for one-to-one point-mean correspondence.</li>
         </ul>
     </section>
 

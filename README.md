@@ -12,6 +12,55 @@ PARIS (**Parallel Adaptive Reweighting Importance Sampling**) combines global ex
 
 This adaptive–parallel design allows PARIS to efficiently discover, refine, and integrate over complex multi-modal landscapes with minimal tuning and far fewer likelihood calls than conventional approaches.
 
+## Algorithm
+
+### PARIS Algorithm (Simplified Implementation)
+
+**Initialization (T=1)**
+
+1. **Distribute N_LHS LHS points** across all prior regions
+2. **Select N_seed points** with highest posterior as process initializations {x_seed^(j)}_{j=1}^{N_proc}
+3. **For each process** x_seed^(j) (j = 1, ..., N_proc):
+   - 3.1) Predefine proposal covariance Σ₁^(j) = Σ_init  
+   - 3.2) Generate first sample: x₁^(j) ~ N(x | x_seed^(j), Σ₁^(j))
+   - 3.3) Initialize importance weight: w₁^(j) = P(x₁^(j)) / q₁^(j)(x₁^(j))
+
+**General Iteration (T > 1)**
+
+1. **For each process** j = 1, ..., N_proc:
+   - 1.1) **Compute weighted mean and covariance**:
+     ```
+     μ_T^(j) = Σ_{t=1}^{T-1} w_t^(j) x_t^(j) / Σ_{t=1}^{T-1} w_t^(j)
+     
+     Σ_T^(j) = Σ_{t=1}^{T-1} w_t^(j) (x_t^(j) - μ_T^(j))(x_t^(j) - μ_T^(j))^T / Σ_{t=1}^{T-1} w_t^(j)
+     ```
+   - 1.2) **Define proposal** as weighted Gaussian mixture:
+     ```
+     q_T^(j)(x) = Σ_{t=1}^{T-1} w_t^(j) N(x | x_t^(j), Σ_T^(j)) / Σ_{t=1}^{T-1} w_t^(j)
+     ```
+   - 1.3) **Choose component** N(x | y_T^(j), Σ_T^(j)) from q_T^(j)(x)
+   - 1.4) **Draw new sample** x_T^(j) from N(x | y_T^(j), Σ_T^(j))
+   - 1.5) **Update past importance weights** for t = 1, ..., T:
+     ```
+     w_t^(j) ← P(x_t^(j)) / (1/T × Σ_{t'=1}^T q_{t'}^(j)(x_t^(j)))
+     ```
+   - 1.6) **Save weighted samples** and proposals at iteration T
+
+2. **Process Interaction**:
+   - 2.1) Initialize all processes as unvisited
+   - 2.2) **For each unvisited process** mean μ_T^(j), find neighbors μ_T^(j') satisfying:
+     ```
+     R_{j'→j} = √((μ_T^(j') - μ_T^(j))^T [Σ_T^(j)]^{-1} (μ_T^(j') - μ_T^(j))) ≤ R_m
+     ```
+   - 2.3) **Form clusters** of j and neighbors, mark as visited
+   - 2.4) **In each cluster**, retain process with highest posterior max P(x_T^(j)), terminate others
+
+**Advanced Implementation Notes:**
+- Covariance matrices updated every **γ iterations** (practical version)
+- Truncation uses latest **α samples** for weighting calculations  
+- **Beta correction** applied for boundary effects when >10% samples fall outside [0,1]^d
+- **OAS shrinkage** applied for robust covariance estimation with small samples
+
 ## Documentation
 
 📖 **[Visit the official documentation site](https://mx-liu123.github.io/parismc/)** for detailed usage guides, API reference, and examples.
