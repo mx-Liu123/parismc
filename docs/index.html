@@ -74,6 +74,7 @@
         <a href="#algorithm">Algorithm</a>
         <a href="#installation">Installation</a>
         <a href="#quick-start">Quick Start</a>
+        <a href="#performance">Performance</a>
         <a href="#api-reference">API Reference</a>
         <a href="#examples">Examples</a>
         <a href="https://github.com/mx-Liu123/parismc">GitHub</a>
@@ -229,6 +230,56 @@ sampler.run_sampling(num_iterations=500, savepath='./results')
 
 # Get results
 samples, weights = sampler.get_samples_with_weights(flatten=True)</div>
+    </section>
+
+    <section id="performance">
+        <h2>Performance</h2>
+        
+        <h3>10D Gaussian Mixture Model Benchmark</h3>
+        <p>PARIS demonstrates exceptional efficiency in high-dimensional, multi-modal scenarios. In a challenging 10D GMM with 10 equally weighted modes:</p>
+        
+        <table style="margin: 20px auto; border-collapse: collapse; width: 100%; max-width: 600px;">
+            <tr style="background-color: #f5f5f5;">
+                <th style="border: 1px solid #ddd; padding: 12px; text-align: left;"><strong>Method</strong></th>
+                <th style="border: 1px solid #ddd; padding: 12px; text-align: center;"><strong>Sample Number</strong></th>
+                <th style="border: 1px solid #ddd; padding: 12px; text-align: center;"><strong>Total Calls</strong></th>
+                <th style="border: 1px solid #ddd; padding: 12px; text-align: center;"><strong>Log Evidence</strong></th>
+            </tr>
+            <tr style="background-color: #e8f4f8; font-weight: bold;">
+                <td style="border: 1px solid #ddd; padding: 12px;">PARIS</td>
+                <td style="border: 1px solid #ddd; padding: 12px; text-align: center;">145,420</td>
+                <td style="border: 1px solid #ddd; padding: 12px; text-align: center;"><strong>150,050</strong></td>
+                <td style="border: 1px solid #ddd; padding: 12px; text-align: center;"><strong>2.30</strong></td>
+            </tr>
+            <tr>
+                <td style="border: 1px solid #ddd; padding: 12px;">Dynesty</td>
+                <td style="border: 1px solid #ddd; padding: 12px; text-align: center;">145,423</td>
+                <td style="border: 1px solid #ddd; padding: 12px; text-align: center;">8,587,847</td>
+                <td style="border: 1px solid #ddd; padding: 12px; text-align: center;">2.30</td>
+            </tr>
+            <tr>
+                <td style="border: 1px solid #ddd; padding: 12px;">PTMCMC</td>
+                <td style="border: 1px solid #ddd; padding: 12px; text-align: center;">145,400</td>
+                <td style="border: 1px solid #ddd; padding: 12px; text-align: center;">822,352</td>
+                <td style="border: 1px solid #ddd; padding: 12px; text-align: center;">1.91</td>
+            </tr>
+        </table>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <img src="images/GMM10D10M.png" alt="10D GMM Performance Comparison" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px;">
+        </div>
+
+        <div class="feature-card">
+            <h3>🏆 Key Results</h3>
+            <ul>
+                <li><strong>🚀 57× fewer likelihood evaluations</strong> than Dynesty (Dynamic Nested Sampling)</li>
+                <li><strong>⚡ 5.5× fewer likelihood evaluations</strong> than PTMCMC</li>
+                <li><strong>🎯 Accurate evidence estimation</strong> (2.30 vs theoretical 2.30)</li>
+                <li><strong>⚖️ Consistent mode recovery</strong> across all dimensions</li>
+                <li><strong>📊 Robust performance</strong> with N<sub>LHS</sub>=10⁴, N<sub>seed</sub>=100</li>
+            </ul>
+            <p><em>Figure: 1D marginalized posterior comparison. PARIS (green) closely matches the analytical target distribution (grey), while competitors show mode recovery bias. The target distribution's uniform-like appearance in 1D projections results from LHS-based placement of GMM component centers ensuring maximal separation. PARIS achieves this accuracy with dramatically fewer likelihood evaluations.</em></p>
+        </div>
     </section>
 
     <section id="examples">
