@@ -1,0 +1,10 @@
+/* Coral accents to mirror the Eryn docs sample */
+.wy-nav-top,
+.wy-side-nav-search {
+  background: coral !important;
+}
+
+/* Optional: improve contrast for the search input */
+.wy-side-nav-search input[type="text"] {
+  border-color: rgba(255, 255, 255, 0.6);
+}
