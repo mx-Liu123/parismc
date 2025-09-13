@@ -43,7 +43,6 @@ class SamplerConfig:
     """Configuration parameters for the Sampler."""
     proc_merge_prob: float = 0.9
     alpha: int = 1000
-    latest_prob_index: int = 1000
     trail_size: int = int(1e3)
     boundary_limiting: bool = True
     use_beta: bool = True
@@ -137,7 +136,7 @@ class Sampler:
         # Set configuration parameters
         self.proc_merge_prob = config.proc_merge_prob
         self.alpha = config.alpha
-        self.latest_prob_index = config.latest_prob_index
+        self.latest_prob_index = config.alpha#config.latest_prob_index
         self.trail_size = config.trail_size
         self.boundary_limiting = config.boundary_limiting
         self.use_beta = config.use_beta
@@ -772,4 +771,5 @@ class Sampler:
             sampler = pickle.load(f)
         
         logger.info(f"Sampler state loaded from {filename}")
+
         return sampler
