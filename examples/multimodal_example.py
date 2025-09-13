@@ -308,7 +308,7 @@ def visualize_marginal_distributions(sampler, savepath):
 
 def create_corner_plot(samples, weights, savepath, max_dims=4):
     """
-    Create a corner plot showing 2D marginals.
+    Create a corner plot showing 1D and 2D marginal densities.
     
     Parameters:
     ----------
@@ -333,6 +333,11 @@ def create_corner_plot(samples, weights, savepath, max_dims=4):
     samples_subset = samples[:, :max_dims]
     
     fig, axes = plt.subplots(max_dims, max_dims, figsize=(12, 12))
+
+    # Precompute target masses for 1, 2, 3-sigma in 2D Gaussian
+    sigma_levels = [1.0, 2.0, 3.0]
+    target_masses = [1.0 - np.exp(-(s ** 2) / 2.0) for s in sigma_levels]  # [39.3%, 86.5%, 98.9%]
+    contour_colors = ['dodgerblue', 'orange', 'red']
     
     for i in range(max_dims):
         for j in range(max_dims):
@@ -347,11 +352,41 @@ def create_corner_plot(samples, weights, savepath, max_dims=4):
                 ax.set_title(f'Dim {i+1}')
                 
             elif i > j:
-                # Lower triangle: 2D scatter
-                scatter = ax.scatter(samples_subset[:, j], samples_subset[:, i], 
-                                   c=weights, s=1, alpha=0.6, cmap='viridis')
+                # Lower triangle: 2D density via histogram
+                H, xedges, yedges, img = ax.hist2d(
+                    samples_subset[:, j],
+                    samples_subset[:, i],
+                    bins=40,
+                    range=[[0, 1], [0, 1]],
+                    weights=weights,
+                    density=True,
+                    cmap='viridis'
+                )
                 ax.set_xlim(0, 1)
                 ax.set_ylim(0, 1)
+
+                # Overlay 1, 2, 3-sigma mass contours for 2D Gaussian
+                dx = np.diff(xedges)[0]
+                dy = np.diff(yedges)[0]
+                area = dx * dy
+                flat = H.ravel()
+                if flat.size > 0 and area > 0:
+                    order = np.argsort(flat)[::-1]
+                    cumsum_mass = np.cumsum(flat[order]) * area
+
+                    # Prepare grid once
+                    xc = 0.5 * (xedges[:-1] + xedges[1:])
+                    yc = 0.5 * (yedges[:-1] + yedges[1:])
+                    X, Y = np.meshgrid(xc, yc, indexing='xy')
+                    Z = H.T  # match shape (ny, nx)
+
+                    for color, mass in zip(contour_colors, target_masses):
+                        idx_level = np.searchsorted(cumsum_mass, mass)
+                        level = flat[order[min(idx_level, len(order) - 1)]]
+                        try:
+                            ax.contour(X, Y, Z, levels=[level], colors=color, linewidths=1.2, linestyles='--')
+                        except Exception:
+                            pass
                 
             else:
                 # Upper triangle: empty
@@ -362,6 +397,23 @@ def create_corner_plot(samples, weights, savepath, max_dims=4):
             if j == 0 and i > 0:
                 ax.set_ylabel(f'Dimension {i+1}')
     
+    # Figure-level legend for sigma contours (English labels)
+    try:
+        from matplotlib.lines import Line2D
+        legend_labels = [
+            "1-sigma (39.3%)",
+            "2-sigma (86.5%)",
+            "3-sigma (98.9%)",
+        ]
+        handles = [
+            Line2D([0], [0], color=c, linestyle='--', linewidth=1.5, label=lab)
+            for c, lab in zip(contour_colors, legend_labels)
+        ]
+        # Place legend once for the whole figure
+        fig.legend(handles=handles, loc='upper right', title='Sigma Contours', frameon=True)
+    except Exception:
+        pass
+
     plt.tight_layout()
     corner_filename = os.path.join(savepath, 'corner_plot.png')
     plt.savefig(corner_filename, dpi=300, bbox_inches='tight')
