@@ -16,9 +16,9 @@ TRUE_MEAN = np.array([0.3, 0.7])
 TRUE_COV = np.array([[0.01, 0.005], [0.005, 0.02]])
 INV_COV = np.linalg.inv(TRUE_COV)
 
-def log_likelihood(x):
+def log_density(x):
     """
-    Log-likelihood for multivariate Gaussian in [0,1]^2 space.
+    Log-density for multivariate Gaussian in [0,1]^2 space.
     
     Parameters:
     ----------
@@ -28,7 +28,7 @@ def log_likelihood(x):
     Returns:
     -------
     array-like, shape (n_samples,)
-        Log-likelihood values
+        Log-density values
     """
     if x.ndim == 1:
         x = x.reshape(1, -1)
@@ -37,7 +37,7 @@ def log_likelihood(x):
     diff = x - TRUE_MEAN
     mahal_dist = np.einsum('ij,jk,ik->i', diff, INV_COV, diff)
     
-    # Return log-likelihood (without normalization constant)
+    # Return log-density (without normalization constant)
     return -0.5 * mahal_dist
 
 def main():
@@ -54,7 +54,7 @@ def main():
     sampler = Sampler(
         ndim=ndim,
         n_seed=n_walkers,
-        log_reward_func=log_likelihood,
+        log_reward_func=log_density,
         init_cov_list=init_cov_list
         # No prior_transform needed for this simple example
     )

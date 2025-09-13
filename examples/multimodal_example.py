@@ -31,9 +31,9 @@ MODES = np.array([
 WEIGHTS = np.array([1.0] * len(MODES))
 LOG_WEIGHTS = np.log(WEIGHTS)
 
-def log_reward(final_states_raw):
+def log_density(final_states_raw):
     """
-    Complex 10D multimodal log-likelihood function with 10 modes.
+    Complex 10D multimodal log-density function with 10 modes.
     
     This function creates a challenging multimodal landscape with:
     - 10 distinct modes in 10D space
@@ -48,7 +48,7 @@ def log_reward(final_states_raw):
     Returns:
     -------
     array-like, shape (n_samples,) or scalar
-        Log-likelihood values
+        Log-density values
     """
     # Transform coordinates: [0,1] -> [-0.2, 1.2]
     final_states_in = (final_states_raw * 1.4) - 0.2
@@ -59,7 +59,7 @@ def log_reward(final_states_raw):
     if final_states_in.ndim == 1:
         final_states_in = final_states_in[None, :]  # shape: (1, ndim)
     
-    # Compute log-likelihood for each mode
+    # Compute log-density for each mode
     log_likelihoods = []
     for mode in MODES:
         # Euclidean distance to mode center
@@ -85,7 +85,7 @@ def prior_transform(u):
     Transform from unit cube [0,1]^ndim to parameter space.
     
     In this case, we keep the same domain [0,1]^ndim since
-    the coordinate transformation is handled inside log_reward.
+    the coordinate transformation is handled inside log_density.
     
     Parameters:
     ----------
@@ -122,7 +122,7 @@ def analyze_results(sampler, savepath):
     print(f"Effective sample size: {1/np.sum(weights**2):.1f}")
     print(f"Weight coefficient of variation: {np.std(weights)/np.mean(weights):.3f}")
     
-    # Transform samples to the coordinate system used in log_reward
+    # Transform samples to the coordinate system used in log_density
     transformed_samples = (samples * 1.4) - 0.2
     
     # Compute weighted statistics
@@ -142,14 +142,14 @@ def analyze_results(sampler, savepath):
     print(f"\nBest sample found:")
     print(f"  Coordinates (unit cube): {best_sample}")
     print(f"  Coordinates (transformed): {(best_sample * 1.4) - 0.2}")
-    print(f"  Log-likelihood: {best_log_reward:.2f}")
+    print(f"  Log-density: {best_log_reward:.2f}")
     
-    # Mode detection (simple clustering based on high-likelihood samples)
+    # Mode detection (simple clustering based on high-density samples)
     high_likelihood_threshold = np.percentile(log_rewards, 95)
     high_likelihood_mask = log_rewards >= high_likelihood_threshold
     high_likelihood_samples = transformed_samples[high_likelihood_mask]
     
-    print(f"\nHigh-likelihood regions (top 5%):")
+    print(f"\nHigh-density regions (top 5%):")
     print(f"  Number of samples: {np.sum(high_likelihood_mask)}")
     
     if np.sum(high_likelihood_mask) > 0:
@@ -176,7 +176,7 @@ def analyze_results(sampler, savepath):
         f.write(f"=====================================\n\n")
         f.write(f"Total samples: {len(samples)}\n")
         f.write(f"Effective sample size: {1/np.sum(weights**2):.1f}\n")
-        f.write(f"Best log-likelihood: {best_log_reward:.6f}\n")
+        f.write(f"Best log-density: {best_log_reward:.6f}\n")
         f.write(f"Best sample (unit cube): {best_sample}\n")
         f.write(f"Best sample (transformed): {(best_sample * 1.4) - 0.2}\n")
     
@@ -221,7 +221,7 @@ def visualize_marginal_distributions(sampler, savepath):
         return smoothed
     
     def gaussian_mixture_likelihood(x, mode, variance=1/(2*400)):
-        """Calculate the likelihood for a single mode in the GMM for a 1D projection."""
+        """Calculate the density for a single mode in the GMM for a 1D projection."""
         x_transformed = 1.4*x - 0.2
         return norm.pdf(x_transformed, loc=mode, scale=np.sqrt(variance))
     
@@ -255,7 +255,7 @@ def visualize_marginal_distributions(sampler, savepath):
         hist = exponential_smoothing(hist, decay=decay)
         ax.plot(bin_centers, hist, color='green', linewidth=2, label='PARIS')
         
-        # Analytical marginal likelihood
+        # Analytical marginal density
         # Sum over all modes for this dimension
         gmm_curve = np.sum([gaussian_mixture_likelihood(x_range, mode=mode_positions[j, i]) 
                            for j in range(len(mode_positions))], axis=0) / len(mode_positions) * 1.4
@@ -418,7 +418,7 @@ def main():
     sampler = Sampler(
         ndim=ndim, 
         n_seed=n_seed,
-        log_reward_func=log_reward,
+        log_reward_func=log_density,
         init_cov_list=init_cov_list,
         prior_transform=prior_transform,
         config=config
