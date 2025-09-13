@@ -396,8 +396,7 @@ def main():
     # Configure sampler for challenging multimodal problem
     config = SamplerConfig(
         proc_merge_prob=0.9,           # High probability for merging similar chains
-        alpha=1000,                    # Importance sampling parameter
-        latest_prob_index=1000,        # Use recent samples for weighting
+        alpha=1000,                    # Use recent samples for weighting
         trail_size=int(1e3),          # Maximum trials per iteration
         boundary_limiting=True,        # Enable boundary constraints
         use_beta=True,                # Use beta correction for boundaries
@@ -468,3 +467,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
