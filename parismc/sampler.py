@@ -68,8 +68,8 @@ class Sampler:
         Dimensionality of the parameter space
     n_seed : int
         Number of initial seed points (walkers)
-    log_reward_func : callable
-        Function that computes log rewards for sample points
+    log_density_func : callable
+        Function that computes log densities for sample points
     init_cov_list : list of array-like
         Initial covariance matrices for each walker
     prior_transform : callable, optional
@@ -79,9 +79,9 @@ class Sampler:
         
     Examples
     --------
-    >>> def log_reward(x):
+    >>> def log_density(x):
     ...     return -0.5 * np.sum(x**2, axis=1)
-    >>> sampler = Sampler(ndim=2, n_seed=3, log_reward_func=log_reward,
+    >>> sampler = Sampler(ndim=2, n_seed=3, log_density_func=log_density,
     ...                   init_cov_list=[np.eye(2)] * 3)
     >>> sampler.prepare_lhs_samples(1000, 100)
     >>> sampler.run_sampling(500, './results')
@@ -98,7 +98,7 @@ class Sampler:
     def __init__(self, 
                  ndim: int, 
                  n_seed: int, 
-                 log_reward_func: Callable[[np.ndarray], np.ndarray],
+                 log_density_func: Callable[[np.ndarray], np.ndarray],
                  init_cov_list: List[np.ndarray], 
                  prior_transform: Optional[Callable] = None,
                  config: Optional[SamplerConfig] = None) -> None:
@@ -115,21 +115,21 @@ class Sampler:
             raise ValueError("n_seed must be positive")
         if len(init_cov_list) != n_seed:
             raise ValueError("init_cov_list length must equal n_seed")
-        if not callable(log_reward_func):
-            raise TypeError("log_reward_func must be callable")
+        if not callable(log_density_func):
+            raise TypeError("log_density_func must be callable")
         if any(cov.shape != (ndim, ndim) for cov in init_cov_list):
             raise ValueError("All covariance matrices must be ndim x ndim")            
         
         self.ndim = ndim
         self.n_seed = n_seed
         
-        self.log_reward_func_original = log_reward_func
+        self.log_density_func_original = log_density_func
         if prior_transform is not None:
             self.prior_transform = prior_transform
-            self.log_reward_func = self.transformed_log_reward_func
+            self.log_density_func = self.transformed_log_density_func
         else:
             self.prior_transform = None
-            self.log_reward_func = log_reward_func
+            self.log_density_func = log_density_func
             
         self.init_cov_list = init_cov_list
         
@@ -160,7 +160,7 @@ class Sampler:
             self.pool = None
 
         # Initialize state variables
-        self.searched_log_rewards_list: List[np.ndarray] = []
+        self.searched_log_densities_list: List[np.ndarray] = []
         self.searched_points_list: List[np.ndarray] = []
         self.means_list: List[np.ndarray] = []
         self.inv_covariances_list: List[np.ndarray] = []
@@ -189,10 +189,10 @@ class Sampler:
             return points
         return prior_transform(points)   
     
-    def transformed_log_reward_func(self, x: np.ndarray) -> np.ndarray:
-        """Apply prior transform before calling the original log reward function."""
+    def transformed_log_density_func(self, x: np.ndarray) -> np.ndarray:
+        """Apply prior transform before calling the original log density function."""
         transformed_x = self.apply_prior_transform(x, self.prior_transform)
-        return self.log_reward_func_original(transformed_x)
+        return self.log_density_func_original(transformed_x)
 
     def prepare_lhs_samples(self, lhs_num: int, batch_size: int) -> None:
         """Prepare LHS samples and initialize the sampler state."""
@@ -204,56 +204,56 @@ class Sampler:
         xlimits = np.array([[0, 1]] * self.ndim, dtype=np.float32)
         sampling = LHS(xlimits=xlimits)
         x = sampling(lhs_num).astype(np.float32)
-        lhs_log_rewards = np.zeros(lhs_num)
+        lhs_log_densities = np.zeros(lhs_num)
         
-        for i in tqdm(range(0, lhs_num, batch_size), desc="Computing LHS rewards"):
+        for i in tqdm(range(0, lhs_num, batch_size), desc="Computing LHS densities"):
             end = min(i + batch_size, lhs_num)
-            lhs_log_rewards[i:end] = self.log_reward_func(x[i:end])
+            lhs_log_densities[i:end] = self.log_density_func(x[i:end])
             
         self.lhs_points_initial = x
-        self.lhs_log_rewards = lhs_log_rewards
+        self.lhs_log_densities = lhs_log_densities
         logger.info(f"Prepared {lhs_num} LHS samples")
             
     def initialize_first_iteration(self, num_iterations: int,
                              external_lhs_points: Optional[np.ndarray] = None,
-                             external_lhs_log_rewards: Optional[np.ndarray] = None) -> None:
+                             external_lhs_log_densities: Optional[np.ndarray] = None) -> None:
         """Initialize the first iteration with LHS samples.
         
         Parameters
         ----------
         external_lhs_points : np.ndarray, optional
             External LHS points to use instead of internal ones
-        external_lhs_log_rewards : np.ndarray, optional
-            External LHS rewards corresponding to external_lhs_points
+        external_lhs_log_densities : np.ndarray, optional
+            External LHS densities corresponding to external_lhs_points
         """
         # Use external LHS data if provided, otherwise use internal data
-        if external_lhs_points is not None and external_lhs_log_rewards is not None:
-            if len(external_lhs_log_rewards.shape) != 1:
-                raise RuntimeError("External LHS log rewards must be 1D") 
-            if len(external_lhs_log_rewards) < self.n_seed:
+        if external_lhs_points is not None and external_lhs_log_densities is not None:
+            if len(external_lhs_log_densities.shape) != 1:
+                raise RuntimeError("External LHS log densities must be 1D") 
+            if len(external_lhs_log_densities) < self.n_seed:
                 raise RuntimeError("External LHS data must larger than n_seed")            
             lhs_points = external_lhs_points
-            lhs_log_rewards = external_lhs_log_rewards
+            lhs_log_densities = external_lhs_log_densities
             logger.info(f"Using external LHS samples: {len(lhs_points)} points")
         else:
-            if not hasattr(self, 'lhs_log_rewards'):
+            if not hasattr(self, 'lhs_log_densities'):
                 raise RuntimeError("Must call prepare_lhs_samples first or provide external LHS data")
             lhs_points = self.lhs_points_initial
-            lhs_log_rewards = self.lhs_log_rewards
+            lhs_log_densities = self.lhs_log_densities
             logger.info(f"Using internal LHS samples: {len(lhs_points)} points")
          
             
-        indices = np.argsort(-lhs_log_rewards)
-        selected_lhs_log_rewards = lhs_log_rewards[indices][:self.n_seed]
+        indices = np.argsort(-lhs_log_densities)
+        selected_lhs_log_densities = lhs_log_densities[indices][:self.n_seed]
         selected_lhs_points_initial = lhs_points[indices][:self.n_seed]
         
-        self.loglike_normalization = selected_lhs_log_rewards[0].copy()
+        self.loglike_normalization = selected_lhs_log_densities[0].copy()
         self.n_walker = self.n_seed
         self.maximum_array_size = self.batch_point_num * num_iterations
 
         # Initialize lists
         for i in range(self.n_seed):
-            self.searched_log_rewards_list.append(np.empty((self.maximum_array_size,)))
+            self.searched_log_densities_list.append(np.empty((self.maximum_array_size,)))
             self.searched_points_list.append(np.empty((self.maximum_array_size, self.ndim)))
             self.means_list.append(np.empty((self.maximum_array_size, self.ndim)))
             self.inv_covariances_list.append(np.empty((int(self.maximum_array_size / self.cov_update_count), self.ndim, self.ndim)))
@@ -265,7 +265,7 @@ class Sampler:
             self.proposalcoeff_list.append(np.ones((self.maximum_array_size,)))
 
             self.searched_points_list[i][:self.batch_point_num] = selected_lhs_points_initial[i].reshape(-1, self.ndim)
-            self.searched_log_rewards_list[i][:self.batch_point_num] = selected_lhs_log_rewards[i]
+            self.searched_log_densities_list[i][:self.batch_point_num] = selected_lhs_log_densities[i]
             self.means_list[i][:self.batch_point_num] = selected_lhs_points_initial[i].reshape(-1, self.ndim)
             self.inv_covariances_list[i][:1] = np.linalg.inv(self.init_cov_list[i]).reshape(-1, self.ndim, self.ndim)
             self.max_loglike_list.append(-np.inf)
@@ -294,7 +294,7 @@ class Sampler:
             
             for j in range(self.n_walker):
                 # Extend each array
-                self.searched_log_rewards_list[j] = np.append(self.searched_log_rewards_list[j], 
+                self.searched_log_densities_list[j] = np.append(self.searched_log_densities_list[j], 
                                                              np.empty((extension_size,)), axis=0)
                 self.searched_points_list[j] = np.append(self.searched_points_list[j], 
                                                         np.empty((extension_size, self.ndim)), axis=0)
@@ -323,17 +323,17 @@ class Sampler:
 
     def run_sampling(self, num_iterations: int, savepath: str, print_iter: int = 1,
                  external_lhs_points: Optional[np.ndarray] = None,
-                 external_lhs_log_rewards: Optional[np.ndarray] = None) -> None:
+                 external_lhs_log_densities: Optional[np.ndarray] = None) -> None:
         """Run the sampling process for a specified number of iterations."""
         if num_iterations <= 0:
             raise ValueError("num_iterations must be positive")
 
         # Validate external inputs if provided
-        if external_lhs_points is not None or external_lhs_log_rewards is not None:
-            if external_lhs_points is None or external_lhs_log_rewards is None:
-                raise ValueError("Both external_lhs_points and external_lhs_log_rewards must be provided together")
-            if len(external_lhs_points) != len(external_lhs_log_rewards):
-                raise ValueError("external_lhs_points and external_lhs_log_rewards must have same length")
+        if external_lhs_points is not None or external_lhs_log_densities is not None:
+            if external_lhs_points is None or external_lhs_log_densities is None:
+                raise ValueError("Both external_lhs_points and external_lhs_log_densities must be provided together")
+            if len(external_lhs_points) != len(external_lhs_log_densities):
+                raise ValueError("external_lhs_points and external_lhs_log_densities must have same length")
             if external_lhs_points.shape[1] != self.ndim:
                 raise ValueError("external_lhs_points must have shape (n_samples, ndim)")
             
@@ -342,7 +342,7 @@ class Sampler:
 
         # If starting from scratch, initialize everything
         if self.current_iter == 0:
-            self.initialize_first_iteration(num_iterations, external_lhs_points, external_lhs_log_rewards)  # self.initialize_first_iteration(num_iterations)
+            self.initialize_first_iteration(num_iterations, external_lhs_points, external_lhs_log_densities)  # self.initialize_first_iteration(num_iterations)
             # Initialize additional variables used in the loop
             self.keep_trial_seeds = np.full(self.n_walker, True)
             self.eff_calls = 0        
@@ -364,7 +364,7 @@ class Sampler:
                         ind1 = max(-self.latest_prob_index + self.element_num_list[j], 0)
                         ind2 = self.element_num_list[j]
                         points_list.append(self.searched_points_list[j][ind1:ind2])
-                        probabilities_list.append(np.exp(self.searched_log_rewards_list[j][ind1:ind2] - self.loglike_normalization))
+                        probabilities_list.append(np.exp(self.searched_log_densities_list[j][ind1:ind2] - self.loglike_normalization))
     
                         # Weighting Part 1: New proposals
                         ind1_newproposals = max(ind2 - self.batch_point_num, 0)
@@ -430,21 +430,21 @@ class Sampler:
     
                 # Merging clusters
                 if i > 0:
-                    combined = sorted(zip(self.max_loglike_list, self.last_gaussian_points, self.searched_points_list, self.searched_log_rewards_list, self.means_list, self.inv_covariances_list, self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.wdeno_list, self.element_num_list, self.now_covariances, self.now_normterms, self.proposalcoeff_list), reverse=True, key=lambda x: x[0])
+                    combined = sorted(zip(self.max_loglike_list, self.last_gaussian_points, self.searched_points_list, self.searched_log_densities_list, self.means_list, self.inv_covariances_list, self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.wdeno_list, self.element_num_list, self.now_covariances, self.now_normterms, self.proposalcoeff_list), reverse=True, key=lambda x: x[0])
                     
-                    self.max_loglike_list, self.last_gaussian_points, self.searched_points_list, self.searched_log_rewards_list, self.means_list, self.inv_covariances_list, self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.wdeno_list, self.element_num_list, self.now_covariances, self.now_normterms, self.proposalcoeff_list = zip(*combined)
+                    self.max_loglike_list, self.last_gaussian_points, self.searched_points_list, self.searched_log_densities_list, self.means_list, self.inv_covariances_list, self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.wdeno_list, self.element_num_list, self.now_covariances, self.now_normterms, self.proposalcoeff_list = zip(*combined)
                     self.last_gaussian_points = list(np.array(self.last_gaussian_points))
                     cluster_indices = get_cluster_indices_cov(np.array(self.last_gaussian_points), self.now_covariances, dist=self.merge_dist)
                     cluster_indices = [sorted(sublist) for sublist in cluster_indices]
     
                     lists_to_merge = [self.wdeno_list, self.searched_points_list, self.inv_covariances_list, self.gaussian_normterm_list, self.means_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list]
-                    merged_lists, self.searched_log_rewards_list = merge_arrays(lists_to_merge, cluster_indices, self.element_num_list, self.searched_log_rewards_list, self.latest_prob_index, self.cov_update_count)
+                    merged_lists, self.searched_log_densities_list = merge_arrays(lists_to_merge, cluster_indices, self.element_num_list, self.searched_log_densities_list, self.latest_prob_index, self.cov_update_count)
                     (self.wdeno_list, self.searched_points_list, self.inv_covariances_list, self.gaussian_normterm_list, self.means_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list) = merged_lists
                     self.max_loglike_list = merge_max_list(self.max_loglike_list, cluster_indices)
                     self.element_num_list = merge_element_num_list(self.element_num_list, cluster_indices)
                     self.now_covariances = merge_max_list(self.now_covariances, cluster_indices)
                     self.now_normterms = merge_max_list(self.now_normterms, cluster_indices)
-                    self.n_walker = len(self.searched_log_rewards_list)
+                    self.n_walker = len(self.searched_log_densities_list)
                     last_gaussian_points_cache = [self.last_gaussian_points[cluster_indices[j][0]] for j in range(self.n_walker)]
                     self.last_gaussian_points = last_gaussian_points_cache
     
@@ -461,7 +461,7 @@ class Sampler:
                     ind1 = 0
                     ind2 = self.element_num_list[j]
                     points_list.append(self.searched_points_list[j][ind1:ind2])
-                    probabilities_list.append(np.exp(self.searched_log_rewards_list[j][ind1:ind2] - self.loglike_normalization))
+                    probabilities_list.append(np.exp(self.searched_log_densities_list[j][ind1:ind2] - self.loglike_normalization))
                     if np.any(self.wdeno_list[j][ind1:ind2] <= 0.):
                         logger.warning(f"Weights <= 0, seed ind {j}, iter {i}")
                     else:
@@ -524,7 +524,7 @@ class Sampler:
                     ))
                     mvn = multivariate_normal(mean=np.zeros(self.ndim), cov=covariance, allow_singular=True)
                     self.last_gaussian_points.append(mean.copy())
-                    gaussian_log_rewards = -np.inf * np.ones((n_guess,))
+                    gaussian_log_densities = -np.inf * np.ones((n_guess,))
                     single_weight_deno = np.ones((n_guess))
     
                     if self.boundary_limiting:
@@ -542,21 +542,21 @@ class Sampler:
                             indices_here = bulky_mean_inds[bulky_ind1:bulky_ind2]
                             gaussian_means = points_all[indices_here]
                             gaussian_points = zeromean_samples[bulky_ind1:bulky_ind2] + gaussian_means
-                            gaussian_log_rewards[:] = -np.inf
+                            gaussian_log_densities[:] = -np.inf
                             single_weight_deno[:] = 1
                             out_of_bound_indices = np.any((gaussian_points < 0) | (gaussian_points > 1), axis=1)
                             is_within_bounds = ~out_of_bound_indices
                             
                             if self.use_pool and self.pool is not None and is_within_bounds.sum() > 0:
                                 gaussian_points_list = [gaussian_points[k, :] for k in range(gaussian_points.shape[0]) if is_within_bounds[k]]
-                                results = self.pool.map(self.log_reward_func, gaussian_points_list)
-                                gaussian_log_rewards[is_within_bounds] = np.array(results).flatten()
+                                results = self.pool.map(self.log_density_func, gaussian_points_list)
+                                gaussian_log_densities[is_within_bounds] = np.array(results).flatten()
                             elif is_within_bounds.sum() > 0:
-                                gaussian_log_rewards[is_within_bounds] = self.log_reward_func(gaussian_points[is_within_bounds])
-                            #print('gaussian_log_rewards[is_within_bounds]',repr(gaussian_points[is_within_bounds]),gaussian_log_rewards[is_within_bounds])
+                                gaussian_log_densities[is_within_bounds] = self.log_density_func(gaussian_points[is_within_bounds])
+                            #print('gaussian_log_densities[is_within_bounds]',repr(gaussian_points[is_within_bounds]),gaussian_log_densities[is_within_bounds])
                                 
                             single_weight_deno[is_within_bounds] = weighting_seeds_onepoint_with_onemean(gaussian_points[is_within_bounds], gaussian_means[is_within_bounds], self.inv_covariances_list[j][int((i + 1) * self.batch_point_num / self.cov_update_count)], self.gaussian_normterm_list[j][int((i + 1) * self.batch_point_num / self.cov_update_count)])
-                            if_weights_big = np.exp(gaussian_log_rewards - self.loglike_normalization) / single_weight_deno > weights_sum / self.exclude_scale_z
+                            if_weights_big = np.exp(gaussian_log_densities - self.loglike_normalization) / single_weight_deno > weights_sum / self.exclude_scale_z
                             if_weights_big = np.full(if_weights_big.shape, True, dtype=bool)
                             bulky_ind1 = bulky_ind2
                             while_call_count += n_guess
@@ -567,7 +567,7 @@ class Sampler:
                                 valid_index = 0
                                 self.call_num_list[j][ind1:ind2] += 1
                                 self.eff_calls += 1
-                                gaussian_log_rewards = gaussian_log_rewards[valid_index:valid_index + 1]
+                                gaussian_log_densities = gaussian_log_densities[valid_index:valid_index + 1]
                                 gaussian_points = gaussian_points[valid_index:valid_index + 1]
                                 gaussian_means = gaussian_means[valid_index:valid_index + 1]
                                 break
@@ -577,7 +577,7 @@ class Sampler:
                                 true_indices = np.flatnonzero(is_within_bounds)
                                 pos = np.where(true_indices == valid_index)[0][0] + 1
                                 self.eff_calls += pos
-                                gaussian_log_rewards = gaussian_log_rewards[valid_index:valid_index + 1]
+                                gaussian_log_densities = gaussian_log_densities[valid_index:valid_index + 1]
                                 gaussian_points = gaussian_points[valid_index:valid_index + 1]
                                 gaussian_means = gaussian_means[valid_index:valid_index + 1]
                                 break
@@ -586,18 +586,18 @@ class Sampler:
                                 valid_index = 0
                                 self.call_num_list[j][ind1:ind2] += n_guess
                                 self.eff_calls += is_within_bounds.sum()
-                                gaussian_log_rewards = gaussian_log_rewards[valid_index:valid_index + 1]
+                                gaussian_log_densities = gaussian_log_densities[valid_index:valid_index + 1]
                                 gaussian_points = gaussian_points[valid_index:valid_index + 1]
                                 gaussian_means = gaussian_means[valid_index:valid_index + 1]
                                 break
     
                     proposalcoeffs = np.ones((len(gaussian_means)))
-                    self.searched_log_rewards_list[j][ind1:ind2] = gaussian_log_rewards.copy()
+                    self.searched_log_densities_list[j][ind1:ind2] = gaussian_log_densities.copy()
                     self.searched_points_list[j][ind1:ind2] = gaussian_points.copy()
                     self.means_list[j][ind1:ind2] = gaussian_means.copy()
                     self.proposalcoeff_list[j][ind1:ind2] = proposalcoeffs.copy()
                     self.element_num_list[j] += self.batch_point_num
-                    self.max_loglike_list[j] = max(self.max_loglike_list[j], gaussian_log_rewards.max())
+                    self.max_loglike_list[j] = max(self.max_loglike_list[j], gaussian_log_densities.max())
     
                 # Update diagnostics
                 if i % self.print_iter == 0:
@@ -605,7 +605,7 @@ class Sampler:
                     calls = sum(self.element_num_list)
                     ind1 = max(int(self.element_num_list[0] * (1 - self.EVIDENCE_ESTIMATION_FRACTION)), 0)
                     ind2 = self.element_num_list[0] - self.batch_point_num
-                    wsum = sum(np.sum(np.exp(self.searched_log_rewards_list[j][ind1:ind2] - c_term) / self.wdeno_list[j][ind1:ind2]) for j in range(self.n_walker)) * self.n_walker * (self.alpha * self.batch_point_num)
+                    wsum = sum(np.sum(np.exp(self.searched_log_densities_list[j][ind1:ind2] - c_term) / self.wdeno_list[j][ind1:ind2]) for j in range(self.n_walker)) * self.n_walker * (self.alpha * self.batch_point_num)
                     Nsum = sum(self.call_num_list[j][ind1:ind2].sum() for j in range(self.n_walker))
                     logZ = c_term - np.log(Nsum) + np.log(wsum)
                     
@@ -652,8 +652,8 @@ class Sampler:
         for j in range(self.n_walker):
             element_num = self.element_num_list[j]
             
-            # Calculate importance weights: exp(log_reward - normalization) / denominator
-            weights = np.exp(self.searched_log_rewards_list[j][:element_num] - self.loglike_normalization)
+            # Calculate importance weights: exp(log_density - normalization) / denominator
+            weights = np.exp(self.searched_log_densities_list[j][:element_num] - self.loglike_normalization)
             
             # Handle the latest batch of points (which might have zero denominators)
             latest_batch_start = element_num - self.batch_point_num
@@ -773,3 +773,4 @@ class Sampler:
         logger.info(f"Sampler state loaded from {filename}")
 
         return sampler
+
