@@ -54,7 +54,7 @@ def main():
     sampler = Sampler(
         ndim=ndim,
         n_seed=n_walkers,
-        log_reward_func=log_density,
+        log_density_func=log_density,
         init_cov_list=init_cov_list
         # No prior_transform needed for this simple example
     )
@@ -138,4 +138,5 @@ def main():
     print("For more complex examples, see multimodal_example.py")
 
 if __name__ == "__main__":
+
     main()
