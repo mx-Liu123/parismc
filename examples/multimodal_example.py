@@ -134,19 +134,19 @@ def analyze_results(sampler, savepath):
     print(f"Weighted std (transformed coordinates): {weighted_std}")
     
     # Find best samples
-    log_rewards = sampler.log_reward_func(samples)
-    best_idx = np.argmax(log_rewards)
+    log_densities = sampler.log_density_func(samples)
+    best_idx = np.argmax(log_densities)
     best_sample = samples[best_idx]
-    best_log_reward = log_rewards[best_idx]
+    best_log_density = log_densities[best_idx]
     
     print(f"\nBest sample found:")
     print(f"  Coordinates (unit cube): {best_sample}")
     print(f"  Coordinates (transformed): {(best_sample * 1.4) - 0.2}")
-    print(f"  Log-density: {best_log_reward:.2f}")
+    print(f"  Log-density: {best_log_density:.2f}")
     
     # Mode detection (simple clustering based on high-density samples)
-    high_likelihood_threshold = np.percentile(log_rewards, 95)
-    high_likelihood_mask = log_rewards >= high_likelihood_threshold
+    high_likelihood_threshold = np.percentile(log_densities, 95)
+    high_likelihood_mask = log_densities >= high_likelihood_threshold
     high_likelihood_samples = transformed_samples[high_likelihood_mask]
     
     print(f"\nHigh-density regions (top 5%):")
@@ -176,7 +176,7 @@ def analyze_results(sampler, savepath):
         f.write(f"=====================================\n\n")
         f.write(f"Total samples: {len(samples)}\n")
         f.write(f"Effective sample size: {1/np.sum(weights**2):.1f}\n")
-        f.write(f"Best log-density: {best_log_reward:.6f}\n")
+        f.write(f"Best log-density: {best_log_density:.6f}\n")
         f.write(f"Best sample (unit cube): {best_sample}\n")
         f.write(f"Best sample (transformed): {(best_sample * 1.4) - 0.2}\n")
     
@@ -418,7 +418,7 @@ def main():
     sampler = Sampler(
         ndim=ndim, 
         n_seed=n_seed,
-        log_reward_func=log_density,
+        log_density_func=log_density,
         init_cov_list=init_cov_list,
         prior_transform=prior_transform,
         config=config
@@ -467,4 +467,5 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
