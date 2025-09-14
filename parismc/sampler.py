@@ -604,7 +604,36 @@ class Sampler:
                                 gaussian_points = gaussian_points[valid_index:valid_index + 1]
                                 gaussian_means = gaussian_means[valid_index:valid_index + 1]
                                 break
-    
+
+                    else:
+                        # No boundary limiting: draw directly without truncation
+                        # Select mean indices according to current weights
+                        indices_here = np.random.choice(len(probabilities_all), self.batch_point_num, p=probabilities_all, replace=True)
+                        gaussian_means = points_all[indices_here]
+                        # Draw zero-mean samples and shift by selected means
+                        zeromean_samples = mvn.rvs(size=self.batch_point_num)
+                        # Ensure correct shape when batch_point_num == 1
+                        if self.batch_point_num == 1:
+                            zeromean_samples = zeromean_samples.reshape(1, -1)
+                        gaussian_points = zeromean_samples + gaussian_means
+                        # Evaluate log density
+                        if self.use_pool and self.pool is not None:
+                            gaussian_points_list = [gaussian_points[k, :] for k in range(gaussian_points.shape[0])]
+                            results = self.pool.map(self.log_density_func, gaussian_points_list)
+                            gaussian_log_densities = np.array(results).flatten()
+                        else:
+                            gaussian_log_densities = self.log_density_func(gaussian_points)
+                        # Single-point denominator with current covariance snapshot
+                        single_weight_deno = weighting_seeds_onepoint_with_onemean(
+                            gaussian_points,
+                            gaussian_means,
+                            self.inv_covariances_list[j][int((i + 1) * self.batch_point_num / self.cov_update_count)],
+                            self.gaussian_normterm_list[j][int((i + 1) * self.batch_point_num / self.cov_update_count)]
+                        )
+                        # Accounting for calls (no rejection cycle here)
+                        self.call_num_list[j][ind1:ind2] += self.batch_point_num
+                        self.eff_calls += self.batch_point_num
+
                     proposalcoeffs = np.ones((len(gaussian_means)))
                     self.searched_log_densities_list[j][ind1:ind2] = gaussian_log_densities.copy()
                     self.searched_points_list[j][ind1:ind2] = gaussian_points.copy()
