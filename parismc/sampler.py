@@ -623,6 +623,7 @@ class Sampler:
                     Nsum = sum(self.call_num_list[j][ind1:ind2].sum() for j in range(self.n_walker))
                     logZ = c_term - np.log(Nsum) + np.log(wsum)
                     
+                    # Report stats for the top walker (processes are periodically sorted by max log-likelihood)
                     status = f"samples: {Nsum}, evals: {calls}, walkers: {self.n_walker}, cov: {self.now_covariances[0][0, 0]:.5e}, logZ: {logZ:.5f}, max_ll: {self.max_loglike_list[0]:.5f}"
                     pbar.set_description(status)
                     pbar.update(self.print_iter)

@@ -204,7 +204,6 @@ def log_likelihood(x):
 # Create sampler configuration
 config = SamplerConfig(
     alpha=1000,
-    latest_prob_index=1000,
     boundary_limiting=True,
     use_pool=False  # Set to True for multiprocessing
 )
@@ -217,7 +216,7 @@ init_cov_list = [np.eye(ndim) * 0.1] * n_walkers
 sampler = Sampler(
     ndim=ndim,
     n_seed=n_walkers,
-    log_reward_func=log_likelihood,
+    log_density_func=log_likelihood,
     init_cov_list=init_cov_list,
     config=config
 )
@@ -291,6 +290,14 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)</div>
         </ul>
     </section>
 
+    <section id="key-hyperparameters">
+        <h2>Key Hyperparameters</h2>
+        <ul>
+            <li><strong>merge_confidence (p)</strong>: Controls the merge radius (Mahalanobis threshold) between seeds. <em>p = 0.9</em> is generally fine for most problems.</li>
+            <li><strong>alpha</strong>: Number of most recent samples used for importance weighting (truncation window). A conservative and safe choice is <em>alpha = 10000</em>. <em>(Called <code>latest_prob_index</code> in older docs.)</em></li>
+        </ul>
+    </section>
+
     <section id="api-reference">
         <h2>API Reference</h2>
         
@@ -302,7 +309,6 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)</div>
 config = SamplerConfig(
     merge_confidence=0.9,
     alpha=1000,
-    latest_prob_index=1000,
     trail_size=1000,
     boundary_limiting=True,
     use_beta=True,
@@ -316,8 +322,7 @@ config = SamplerConfig(
         <h4>Parameters</h4>
         <ul>
             <li><strong>merge_confidence</strong> (float, default=0.9): Coverage probability mapped to Mahalanobis merge radius <em>R<sub>m</sub></em> by <code>R_m = find_sigma_level(ndim, p)</code>. Higher p → larger R<sub>m</sub> (more permissive). Edge cases: p=0 ⇒ R<sub>m</sub>=0; p→1 ⇒ R<sub>m</sub>→∞. When comparing two processes, compute distances using each process's own covariance and compare the smaller distance to R<sub>m</sub>.</li>
-            <li><strong>alpha</strong> (int, default=1000): <em>Paper: α</em> - Truncation parameter, considering only the latest α iterations' samples for importance weight calculations. Controls temporal locality in proposal adaptation.</li>
-            <li><strong>latest_prob_index</strong> (int, default=1000): <em>Equivalent to α</em> - Number of most recent samples used for probability weighting calculations. Redundant parameter matching alpha value.</li>
+            <li><strong>alpha</strong> (int, default=1000): <em>Paper: α</em> - Only the latest α samples are used for importance weight calculations (truncation for temporal locality).</li>
             <li><strong>trail_size</strong> (int, default=1000): <em>Paper: MaxResample</em> - Maximum number of attempts after rejecting an invalid sample during boundary-constrained sampling.</li>
             <li><strong>boundary_limiting</strong> (bool, default=True): <em>Paper: Always True</em> - Enable boundary constraint handling for [0,1]<sup>d</sup> unit cube. Essential for proper sampling within parameter bounds.</li>
             <li><strong>use_beta</strong> (bool, default=True): <em>Paper: Beta correction</em> - Apply beta correction for boundary truncation effects when >10% samples fall outside [0,1]<sup>d</sup>. Part of advanced covariance estimation.</li>
@@ -334,7 +339,7 @@ config = SamplerConfig(
         <div class="code-block">sampler = Sampler(
     ndim=2,
     n_seed=5,
-    log_reward_func=log_likelihood,
+    log_density_func=log_likelihood,
     init_cov_list=[np.eye(2) * 0.1] * 5,
     prior_transform=None,
     config=config
@@ -344,7 +349,7 @@ config = SamplerConfig(
         <ul>
             <li><strong>ndim</strong> (int): Dimensionality of the parameter space.</li>
             <li><strong>n_seed</strong> (int): Number of initial seed points (walkers) for parallel exploration.</li>
-            <li><strong>log_reward_func</strong> (callable): Function computing log rewards/likelihoods. Must accept numpy array of shape (N, ndim) and return array of shape (N,).</li>
+            <li><strong>log_density_func</strong> (callable): Function computing log densities. Must accept numpy array of shape (N, ndim) and return array of shape (N,).</li>
             <li><strong>init_cov_list</strong> (list): List of initial covariance matrices (ndim × ndim) for each walker.</li>
             <li><strong>prior_transform</strong> (callable, optional): Function transforming from unit cube [0,1]^d to parameter space. If None, assumes unit cube sampling.</li>
             <li><strong>config</strong> (SamplerConfig, optional): Configuration object. Uses defaults if not provided.</li>
@@ -398,6 +403,16 @@ config = SamplerConfig(
             <li><strong>weighting_seeds_manypoint()</strong>: Compute importance weights for multiple points against multiple proposal means.</li>
             <li><strong>weighting_seeds_manycov()</strong>: Compute weights using multiple covariance matrices.</li>
             <li><strong>weighting_seeds_onepoint_with_onemean()</strong>: Compute weights for one-to-one point-mean correspondence.</li>
+        </ul>
+    </section>
+
+    <section id="tuning-tips">
+        <h2>Tuning Tips</h2>
+        <ul>
+            <li><strong>n_lhs</strong> (<code>lhs_num</code> in API): Number of LHS points covering the prior for a global search of good start points. Estimate from the relative size of a typical mode vs prior region. If a mode occupies fraction f of the prior volume, pick <code>lhs_num ≳ c/f</code> (with <code>c≈50–200</code>) to get multiple hits per mode; 10³–10⁵ is common by dimension.</li>
+            <li><strong>n_seed</strong>: Depends on a conservative estimate of total mode count. Recommend <code>n_seed = 10 ×</code> expected modes to avoid missing weaker modes.</li>
+            <li><strong>init_cov_list</strong>: Initial covariance per process. Use a conservative small estimate of mode size, or the inverse Fisher matrix if available. On a unit cube, a reasonable start is <code>diag((0.05–0.1)^2)</code> per dimension, adjusted per scale.</li>
+            <li><strong>Less sensitive</strong>: <code>alpha</code> and <code>merge_confidence</code> usually work well with defaults. Use <code>alpha=10000</code> for a safe window and <code>merge_confidence p=0.9</code> for general use.</li>
         </ul>
     </section>
 
