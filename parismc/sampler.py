@@ -40,8 +40,22 @@ except ImportError:
 
 @dataclass
 class SamplerConfig:
-    """Configuration parameters for the Sampler."""
-    proc_merge_prob: float = 0.9
+    """Configuration parameters for the Sampler.
+
+    Notes on merging parameter:
+    - merge_confidence p in [0, 1] maps to a dimension-aware Mahalanobis
+      threshold R_m via R_m = find_sigma_level(ndim, p).
+      Larger p -> larger R_m (more permissive). Edge cases: p=0 => R_m=0;
+      p->1 => R_m->infinity.
+    - When considering whether to merge two processes, distances are computed
+      with respect to each process's own covariance (asymmetric Mahalanobis
+      distances); the smaller of the two distances is compared to R_m.
+    """
+    # New preferred name (replaces deprecated proc_merge_prob)
+    merge_confidence: float = 0.9  # Probability mass inside merge radius R_m (0→R_m=0, 1→R_m→∞)
+    # Deprecated: kept for backward compatibility. If provided and
+    # merge_confidence is not explicitly set, this value will be used.
+    proc_merge_prob: float = None  # DEPRECATED
     alpha: int = 1000
     trail_size: int = int(1e3)
     boundary_limiting: bool = True
@@ -134,7 +148,12 @@ class Sampler:
         self.init_cov_list = init_cov_list
         
         # Set configuration parameters
-        self.proc_merge_prob = config.proc_merge_prob
+        # Resolve merge confidence with backward compatibility
+        if getattr(config, 'merge_confidence', None) is not None:
+            self.merge_confidence = config.merge_confidence
+        else:
+            # Fallback to deprecated proc_merge_prob if given; default to 0.9
+            self.merge_confidence = getattr(config, 'proc_merge_prob', 0.9)
         self.alpha = config.alpha
         self.latest_prob_index = config.alpha#config.latest_prob_index
         self.trail_size = config.trail_size
@@ -148,7 +167,10 @@ class Sampler:
         
         self.batch_point_num = 1
         self.cov_update_count = self.batch_point_num * self.gamma
-        self.merge_dist = find_sigma_level(self.ndim, self.proc_merge_prob)
+        # Mahalanobis merge threshold R_m derived from coverage probability p
+        # R_m = find_sigma_level(ndim, p). Higher p → larger R_m.
+        # p=0 => R_m=0; p→1 => R_m→∞. See SamplerConfig notes.
+        self.merge_dist = find_sigma_level(self.ndim, self.merge_confidence)
         self.current_iter = 0
         self.loglike_normalization = None
         self.n_walker = None

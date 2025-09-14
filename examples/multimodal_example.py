@@ -447,7 +447,7 @@ def main():
     
     # Configure sampler for challenging multimodal problem
     config = SamplerConfig(
-        proc_merge_prob=0.9,           # High probability for merging similar chains
+        merge_confidence=0.9,          # Coverage prob → Mahalanobis merge radius R_m (higher is more permissive)
         alpha=1000,                    # Use recent samples for weighting
         trail_size=int(1e3),          # Maximum trials per iteration
         boundary_limiting=True,        # Enable boundary constraints
