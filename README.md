@@ -136,7 +136,6 @@ def log_likelihood(x):
 # Create sampler configuration
 config = SamplerConfig(
     alpha=1000,
-    latest_prob_index=1000,
     boundary_limiting=True,
     use_pool=False  # Set to True for multiprocessing
 )
@@ -149,7 +148,7 @@ init_cov_list = [np.eye(ndim) * 0.1] * n_walkers
 sampler = Sampler(
     ndim=ndim,
     n_seed=n_walkers,
-    log_reward_func=log_likelihood,
+    log_density_func=log_likelihood,
     init_cov_list=init_cov_list,
     config=config
 )
@@ -177,7 +176,7 @@ def uniform_to_normal(x):
 sampler = Sampler(
     ndim=ndim,
     n_seed=n_walkers,
-    log_reward_func=log_likelihood,
+    log_density_func=log_likelihood,
     init_cov_list=init_cov_list,
     prior_transform=uniform_to_normal
 )
@@ -188,16 +187,27 @@ sampler = Sampler(
 ```python
 config = SamplerConfig(
     merge_confidence=0.9,       # Coverage prob mapped to Mahalanobis merge radius R_m (0→R_m=0, 1→R_m→∞)
-    alpha=1000,                 # Importance sampling parameter
-    latest_prob_index=1000,     # Number of recent samples for weighting
-    trail_size=1000,           # Maximum trial samples per iteration
+    alpha=1000,                 # Number of most recent samples used for weighting
+    trail_size=1000,            # Maximum trial samples per iteration
     boundary_limiting=True,     # Enable boundary constraint handling
-    use_beta=True,             # Use beta correction for boundaries
-    integral_num=100000,       # Monte Carlo samples for beta estimation
-    gamma=100,                 # Covariance update frequency
-    use_pool=True,             # Enable multiprocessing
-    n_pool=4                   # Number of processes
+    use_beta=True,              # Use beta correction for boundaries
+    integral_num=100000,        # Monte Carlo samples for beta estimation
+    gamma=100,                  # Covariance update frequency
+    use_pool=True,              # Enable multiprocessing
+    n_pool=4                    # Number of processes
 )
+
+### Key Hyperparameters
+
+- merge_confidence (`p`): Controls the merge radius between parallel seeds via a Mahalanobis threshold. p=0.9 is generally a good default; increase if modes are broad and overlapping, decrease if modes are tight and distinct.
+- alpha: Number of most recent samples used for importance weighting (truncation window). alpha=1000 works well in many cases; a conservative and safe choice is alpha=10000 (older docs called this latest_prob_index).
+
+### Tuning Tips
+
+- n_lhs (`lhs_num` in API): Number of LHS points used to cover the prior for a global search of good starting points. Estimate it from the relative size of a typical mode vs the prior region. If a mode occupies fraction f of the prior volume, choose lhs_num ≳ c/f (c≈50–200) so each mode gets multiple hits. Pragmatic ranges are 1e3–1e5 depending on dimension.
+- n_seed: Depends on your conservative estimate of the total number of modes. A robust rule is 10× the expected number of modes to avoid missing weaker ones.
+- init_cov_list: Initial covariance per process. Use a conservative small estimate of mode size, or the inverse Fisher matrix if available. On a [0,1]^d unit cube, a good starting point is diag((0.05–0.1)^2) scaled per-dimension.
+- Less sensitive: `alpha` and `merge_confidence` are typically robust. Defaults often suffice; try `alpha=10000` and `p=0.9` for safe, general settings.
 ```
 
 ## API Reference
