@@ -187,7 +187,7 @@ sampler = Sampler(
 
 ```python
 config = SamplerConfig(
-    proc_merge_prob=0.9,        # Probability threshold for merging clusters
+    merge_confidence=0.9,       # Coverage prob mapped to Mahalanobis merge radius R_m (0→R_m=0, 1→R_m→∞)
     alpha=1000,                 # Importance sampling parameter
     latest_prob_index=1000,     # Number of recent samples for weighting
     trail_size=1000,           # Maximum trial samples per iteration

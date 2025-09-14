@@ -300,7 +300,7 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)</div>
         <div class="code-block">from parismc import SamplerConfig
 
 config = SamplerConfig(
-    proc_merge_prob=0.9,
+    merge_confidence=0.9,
     alpha=1000,
     latest_prob_index=1000,
     trail_size=1000,
@@ -315,7 +315,7 @@ config = SamplerConfig(
 
         <h4>Parameters</h4>
         <ul>
-            <li><strong>proc_merge_prob</strong> (float, default=0.9): <em>Paper: R<sub>m</sub></em> - Distance criteria for merging nearby seeds. Implemented as probability threshold (0.9) corresponding to 90% probability mass for process merging decisions.</li>
+            <li><strong>merge_confidence</strong> (float, default=0.9): Coverage probability mapped to Mahalanobis merge radius <em>R<sub>m</sub></em> by <code>R_m = find_sigma_level(ndim, p)</code>. Higher p → larger R<sub>m</sub> (more permissive). Edge cases: p=0 ⇒ R<sub>m</sub>=0; p→1 ⇒ R<sub>m</sub>→∞. When comparing two processes, compute distances using each process's own covariance and compare the smaller distance to R<sub>m</sub>.</li>
             <li><strong>alpha</strong> (int, default=1000): <em>Paper: α</em> - Truncation parameter, considering only the latest α iterations' samples for importance weight calculations. Controls temporal locality in proposal adaptation.</li>
             <li><strong>latest_prob_index</strong> (int, default=1000): <em>Equivalent to α</em> - Number of most recent samples used for probability weighting calculations. Redundant parameter matching alpha value.</li>
             <li><strong>trail_size</strong> (int, default=1000): <em>Paper: MaxResample</em> - Maximum number of attempts after rejecting an invalid sample during boundary-constrained sampling.</li>
