@@ -51,11 +51,7 @@ class SamplerConfig:
       with respect to each process's own covariance (asymmetric Mahalanobis
       distances); the smaller of the two distances is compared to R_m.
     """
-    # New preferred name (replaces deprecated proc_merge_prob)
     merge_confidence: float = 0.9  # Probability mass inside merge radius R_m (0→R_m=0, 1→R_m→∞)
-    # Deprecated: kept for backward compatibility. If provided and
-    # merge_confidence is not explicitly set, this value will be used.
-    proc_merge_prob: float = None  # DEPRECATED
     alpha: int = 1000
     trail_size: int = int(1e3)
     boundary_limiting: bool = True
@@ -148,12 +144,8 @@ class Sampler:
         self.init_cov_list = init_cov_list
         
         # Set configuration parameters
-        # Resolve merge confidence with backward compatibility
-        if getattr(config, 'merge_confidence', None) is not None:
-            self.merge_confidence = config.merge_confidence
-        else:
-            # Fallback to deprecated proc_merge_prob if given; default to 0.9
-            self.merge_confidence = getattr(config, 'proc_merge_prob', 0.9)
+        # Merge confidence (coverage probability) used to derive Mahalanobis threshold R_m
+        self.merge_confidence = config.merge_confidence
         self.alpha = config.alpha
         self.latest_prob_index = config.alpha#config.latest_prob_index
         self.trail_size = config.trail_size
