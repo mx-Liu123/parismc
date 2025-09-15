@@ -224,6 +224,20 @@ config = SamplerConfig(
 - `get_samples_with_weights()`: Retrieve samples and importance weights
 - `save_state()` / `load_state()`: State persistence
 
+#### Loading a Saved Sampler
+
+```python
+from parismc import Sampler
+
+# Load sampler state (e.g., from the multimodal example output)
+sampler = Sampler.load_state('./multimodal_results/sampler_state.pkl')
+
+# Access weighted samples
+samples, weights = sampler.get_samples_with_weights(flatten=True)
+```
+
+See `examples/load_sampler_example.py` for a complete, multi-modal loading + analysis walkthrough.
+
 ### Utility Functions
 
 - `find_sigma_level()`: Compute confidence level thresholds
