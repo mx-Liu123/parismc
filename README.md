@@ -142,12 +142,12 @@ config = SamplerConfig(
 
 # Initialize sampler
 ndim = 2
-n_walkers = 5
-init_cov_list = [np.eye(ndim) * 0.1] * n_walkers
+n_seed = 5
+init_cov_list = [np.eye(ndim) * 0.1] * n_seed
 
 sampler = Sampler(
     ndim=ndim,
-    n_seed=n_walkers,
+    n_seed=n_seed,
     log_density_func=log_likelihood,
     init_cov_list=init_cov_list,
     config=config
@@ -175,7 +175,7 @@ def uniform_to_normal(x):
 
 sampler = Sampler(
     ndim=ndim,
-    n_seed=n_walkers,
+    n_seed=n_seed,
     log_density_func=log_likelihood,
     init_cov_list=init_cov_list,
     prior_transform=uniform_to_normal
@@ -274,6 +274,7 @@ If you use this software in your research, please cite:
 }
 
 ```
+
 
 
 
