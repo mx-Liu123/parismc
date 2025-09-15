@@ -77,11 +77,11 @@ class Sampler:
     ndim : int
         Dimensionality of the parameter space
     n_seed : int
-        Number of initial seed points (walkers)
+        Number of initial seed points (processes)
     log_density_func : callable
         Function that computes log densities for sample points
     init_cov_list : list of array-like
-        Initial covariance matrices for each walker
+        Initial covariance matrices for each process
     prior_transform : callable, optional
         Function to transform from unit cube to parameter space
     config : SamplerConfig, optional
@@ -165,7 +165,7 @@ class Sampler:
         self.merge_dist = find_sigma_level(self.ndim, self.merge_confidence)
         self.current_iter = 0
         self.loglike_normalization = None
-        self.n_walker = None
+        self.n_proc = None
         
         # Initialize multiprocessing pool if needed
         if self.use_pool:
@@ -262,7 +262,7 @@ class Sampler:
         selected_lhs_points_initial = lhs_points[indices][:self.n_seed]
         
         self.loglike_normalization = selected_lhs_log_densities[0].copy()
-        self.n_walker = self.n_seed
+        self.n_proc = self.n_seed
         self.maximum_array_size = self.batch_point_num * num_iterations
 
         # Initialize lists
@@ -306,7 +306,7 @@ class Sampler:
             extension_size = required_size - self.maximum_array_size
             cov_extension = int(extension_size / self.cov_update_count) + 1
             
-            for j in range(self.n_walker):
+            for j in range(self.n_proc):
                 # Extend each array
                 self.searched_log_densities_list[j] = np.append(self.searched_log_densities_list[j], 
                                                              np.empty((extension_size,)), axis=0)
@@ -358,7 +358,7 @@ class Sampler:
         if self.current_iter == 0:
             self.initialize_first_iteration(num_iterations, external_lhs_points, external_lhs_log_densities)  # self.initialize_first_iteration(num_iterations)
             # Initialize additional variables used in the loop
-            self.keep_trial_seeds = np.full(self.n_walker, True)
+            self.keep_trial_seeds = np.full(self.n_proc, True)
             self.eff_calls = 0        
             num_iterations -= 1            
         else:
@@ -374,7 +374,7 @@ class Sampler:
     
                 # Weighting calculations
                 if i > 0:
-                    for j in range(self.n_walker):
+                    for j in range(self.n_proc):
                         ind1 = max(-self.latest_prob_index + self.element_num_list[j], 0)
                         ind2 = self.element_num_list[j]
                         points_list.append(self.searched_points_list[j][ind1:ind2])
@@ -458,8 +458,8 @@ class Sampler:
                     self.element_num_list = merge_element_num_list(self.element_num_list, cluster_indices)
                     self.now_covariances = merge_max_list(self.now_covariances, cluster_indices)
                     self.now_normterms = merge_max_list(self.now_normterms, cluster_indices)
-                    self.n_walker = len(self.searched_log_densities_list)
-                    last_gaussian_points_cache = [self.last_gaussian_points[cluster_indices[j][0]] for j in range(self.n_walker)]
+                    self.n_proc = len(self.searched_log_densities_list)
+                    last_gaussian_points_cache = [self.last_gaussian_points[cluster_indices[j][0]] for j in range(self.n_proc)]
                     self.last_gaussian_points = last_gaussian_points_cache
     
                 # Update means and covariances
@@ -469,9 +469,9 @@ class Sampler:
                 if (i + 1) % self.gamma == 0:
                     self.now_covariances = []
                     self.now_normterms = []
-                    self.keep_trial_seeds = np.full(self.n_walker, True)
+                    self.keep_trial_seeds = np.full(self.n_proc, True)
     
-                for j in range(self.n_walker):
+                for j in range(self.n_proc):
                     ind1 = 0
                     ind2 = self.element_num_list[j]
                     points_list.append(self.searched_points_list[j][ind1:ind2])
@@ -522,7 +522,7 @@ class Sampler:
     
                 # Generate new points
                 self.last_gaussian_points = []
-                for j in range(self.n_walker):
+                for j in range(self.n_proc):
                     points_all = points_list[j]
                     probabilities_all = probabilities_list[j]
                     mean = self.now_means[j]
@@ -648,12 +648,12 @@ class Sampler:
                     calls = sum(self.element_num_list)
                     ind1 = max(int(self.element_num_list[0] * (1 - self.EVIDENCE_ESTIMATION_FRACTION)), 0)
                     ind2 = self.element_num_list[0] - self.batch_point_num
-                    wsum = sum(np.sum(np.exp(self.searched_log_densities_list[j][ind1:ind2] - c_term) / self.wdeno_list[j][ind1:ind2]) for j in range(self.n_walker)) * self.n_walker * (self.alpha * self.batch_point_num)
-                    Nsum = sum(self.call_num_list[j][ind1:ind2].sum() for j in range(self.n_walker))
+                    wsum = sum(np.sum(np.exp(self.searched_log_densities_list[j][ind1:ind2] - c_term) / self.wdeno_list[j][ind1:ind2]) for j in range(self.n_proc)) * self.n_proc * (self.alpha * self.batch_point_num)
+                    Nsum = sum(self.call_num_list[j][ind1:ind2].sum() for j in range(self.n_proc))
                     logZ = c_term - np.log(Nsum) + np.log(wsum)
                     
-                    # Report stats for the top walker (processes are periodically sorted by max log-likelihood)
-                    status = f"samples: {Nsum}, evals: {calls}, walkers: {self.n_walker}, cov: {self.now_covariances[0][0, 0]:.5e}, logZ: {logZ:.5f}, max_ll: {self.max_loglike_list[0]:.5f}"
+                    # Report stats for the top process (processes are periodically sorted by max log-likelihood)
+                    status = f"samples: {Nsum}, evals: {calls}, processes: {self.n_proc}, cov: {self.now_covariances[0][0, 0]:.5e}, logZ: {logZ:.5f}, max_ll: {self.max_loglike_list[0]:.5f}"
                     pbar.set_description(status)
                     pbar.update(self.print_iter)
     
@@ -684,16 +684,16 @@ class Sampler:
     
     def imp_weights_list(self) -> List[np.ndarray]:
         """
-        Calculate and return importance weights for all samples across all walkers,
+        Calculate and return importance weights for all samples across all processes,
         handling the special case of the latest batch of samples.
         
         Returns:
         -------
         list of numpy.ndarray:
-            A list where each element is an array of importance weights for a walker.
+            A list where each element is an array of importance weights for a process.
         """
         weights_list = []
-        for j in range(self.n_walker):
+        for j in range(self.n_proc):
             element_num = self.element_num_list[j]
             
             # Calculate importance weights: exp(log_density - normalization) / denominator
@@ -740,7 +740,7 @@ class Sampler:
         ----------
         flatten : bool, optional
             If True, returns concatenated arrays of all samples and weights.
-            If False, returns lists of arrays for each walker. Default is False.
+            If False, returns lists of arrays for each process. Default is False.
         
         Returns:
         -------
@@ -755,14 +755,14 @@ class Sampler:
         # Get transformed samples
         if self.prior_transform is not None:
             transformed_samples_list = []
-            for j in range(self.n_walker):
+            for j in range(self.n_proc):
                 element_num = self.element_num_list[j]
                 samples = self.searched_points_list[j][:element_num]
                 transformed_samples = self.apply_prior_transform(samples, self.prior_transform)
                 transformed_samples_list.append(transformed_samples)
         else:
             transformed_samples_list = []
-            for j in range(self.n_walker):
+            for j in range(self.n_proc):
                 element_num = self.element_num_list[j]
                 transformed_samples_list.append(self.searched_points_list[j][:element_num])
         
@@ -817,4 +817,5 @@ class Sampler:
         logger.info(f"Sampler state loaded from {filename}")
 
         return sampler
+
 
