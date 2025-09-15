@@ -110,14 +110,14 @@ pip install parismc
 
 ### From Source
 ```bash
-git clone https://github.com/yourusername/parismc.git
+git clone https://github.com/mx-Liu123/parismc.git
 cd parismc
 pip install -e .
 ```
 
 ### Development Installation
 ```bash
-git clone https://github.com/yourusername/parismc.git
+git clone https://github.com/mx-Liu123/parismc.git
 cd parismc
 pip install -e .[dev]
 ```
@@ -272,6 +272,7 @@ If you use this software in your research, please cite:
 }
 
 ```
+
 
 
 
