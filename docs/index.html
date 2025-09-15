@@ -210,12 +210,12 @@ config = SamplerConfig(
 
 # Initialize sampler
 ndim = 2
-n_walkers = 5
-init_cov_list = [np.eye(ndim) * 0.1] * n_walkers
+n_seed = 5
+init_cov_list = [np.eye(ndim) * 0.1] * n_seed
 
 sampler = Sampler(
     ndim=ndim,
-    n_seed=n_walkers,
+    n_seed=n_seed,
     log_density_func=log_likelihood,
     init_cov_list=init_cov_list,
     config=config
@@ -348,9 +348,9 @@ config = SamplerConfig(
         <h4>Constructor Parameters</h4>
         <ul>
             <li><strong>ndim</strong> (int): Dimensionality of the parameter space.</li>
-            <li><strong>n_seed</strong> (int): Number of initial seed points (walkers) for parallel exploration.</li>
+            <li><strong>n_seed</strong> (int): Number of initial seed points (processes) for parallel exploration.</li>
             <li><strong>log_density_func</strong> (callable): Function computing log densities. Must accept numpy array of shape (N, ndim) and return array of shape (N,).</li>
-            <li><strong>init_cov_list</strong> (list): List of initial covariance matrices (ndim × ndim) for each walker.</li>
+            <li><strong>init_cov_list</strong> (list): List of initial covariance matrices (ndim × ndim) for each process.</li>
             <li><strong>prior_transform</strong> (callable, optional): Function transforming from unit cube [0,1]^d to parameter space. If None, assumes unit cube sampling.</li>
             <li><strong>config</strong> (SamplerConfig, optional): Configuration object. Uses defaults if not provided.</li>
         </ul>
@@ -375,7 +375,7 @@ config = SamplerConfig(
         <h5>get_samples_with_weights(flatten=False)</h5>
         <p>Retrieve samples and their importance weights.</p>
         <ul>
-            <li><strong>flatten</strong> (bool): If True, return flattened arrays. If False, return lists of arrays per walker.</li>
+            <li><strong>flatten</strong> (bool): If True, return flattened arrays. If False, return lists of arrays per process.</li>
             <li><strong>Returns</strong>: Tuple of (samples, weights) - either as lists or flattened arrays.</li>
         </ul>
 
@@ -442,4 +442,5 @@ config = SamplerConfig(
         <p>MIT License | <a href="https://github.com/mx-Liu123/parismc">GitHub Repository</a></p>
     </footer>
 </body>
+
 </html>
