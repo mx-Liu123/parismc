@@ -201,7 +201,7 @@ config = SamplerConfig(
 
 ### Key Hyperparameters
 
-- merge_confidence (`p`): Controls the merge radius between parallel seeds via a Mahalanobis threshold. p=0.9 is generally a good default; increase if modes are broad and overlapping, decrease if modes are tight and distinct.
+- merge_confidence: Controls the merge radius between parallel seeds via a Mahalanobis threshold. merge_confidence=0.9 is generally a good default; increase if modes are broad and overlapping, decrease if modes are tight and distinct.
 - alpha: Number of most recent samples used for importance weighting (truncation window). alpha=1000 works well in many cases; a conservative and safe choice is alpha=10000 (older docs called this latest_prob_index).
 - n_lhs (`lhs_num` in API): Number of LHS points used to cover the prior for a global search of good starting points. Estimate it from the relative size of a typical mode vs the prior region. If a mode occupies fraction f of the prior volume, choose lhs_num ≳ c/f (c≈50–200) so each mode gets multiple hits. Pragmatic ranges are 1e3–1e5 depending on dimension.
 - n_seed: Depends on your conservative estimate of the total number of modes. A robust rule is 10× the expected number of modes to avoid missing weaker ones.
@@ -272,6 +272,7 @@ If you use this software in your research, please cite:
 }
 
 ```
+
 
 
 
