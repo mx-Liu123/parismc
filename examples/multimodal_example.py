@@ -433,14 +433,14 @@ def main():
     
     # Problem setup
     ndim = 10
-    n_seed = 100  # Number of initial walkers/chains
+    n_seed = 100  # Number of initial processes
     sigma = 0.01  # Initial covariance scale
     savepath = './multimodal_results/'
     
     # Create save directory
     os.makedirs(savepath, exist_ok=True)
     
-    # Initialize covariance matrices for each walker
+    # Initialize covariance matrices for each process
     init_cov_list = []
     for i in range(n_seed):
         init_cov_list.append(sigma**2 * np.eye(ndim))
@@ -460,7 +460,7 @@ def main():
     )
     
     print(f"Problem dimension: {ndim}")
-    print(f"Number of walkers: {n_seed}")
+    print(f"Number of processes: {n_seed}")
     print(f"Initial covariance scale: {sigma}")
     print(f"Save path: {savepath}")
     print(f"Multiprocessing: {config.use_pool}")
