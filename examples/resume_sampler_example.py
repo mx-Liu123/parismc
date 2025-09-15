@@ -46,7 +46,7 @@ def summarize(sampler: Sampler) -> None:
     print("Sampler State")
     print("-------------")
     print(f"ndim: {sampler.ndim}")
-    print(f"n_walkers: {sampler.n_seed}")
+    print(f"n_proc: {sampler.n_seed}")
     print(f"current_iter: {getattr(sampler, 'current_iter', None)}")
     print(f"savepath: {getattr(sampler, 'savepath', '(unset)')}")
 
