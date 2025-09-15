@@ -53,11 +53,7 @@ def log_density(final_states_raw):
     # Transform coordinates: [0,1] -> [-0.2, 1.2]
     final_states_in = (final_states_raw * 1.4) - 0.2
     
-    # Equal weights for all modes (already defined at module level)
-    
-    # Ensure input is 2D
-    if final_states_in.ndim == 1:
-        final_states_in = final_states_in[None, :]  # shape: (1, ndim)
+    # Equal weights for all modes (already defined at module level)    
     
     # Compute log-density for each mode
     log_likelihoods = []
@@ -519,5 +515,6 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
