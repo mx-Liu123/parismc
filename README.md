@@ -12,6 +12,10 @@ PARIS (**Parallel Adaptive Reweighting Importance Sampling**) combines global ex
 
 This adaptive–parallel design allows PARIS to efficiently discover, refine, and integrate over complex multi-modal landscapes with minimal tuning and far fewer likelihood calls than conventional approaches.
 
+## Documentation
+
+📖 **[Visit the official documentation site](https://mx-liu123.github.io/parismc/)** for detailed usage guides, API reference, and examples.
+
 ## Algorithm
 
 ### PARIS Algorithm (Simplified Implementation)
@@ -85,10 +89,6 @@ PARIS demonstrates exceptional efficiency in high-dimensional, multi-modal scena
 </div>
 
 *Figure: 1D marginalized posterior comparison. PARIS (green) closely matches the analytical target distribution (grey), while competitors show mode recovery bias. The target distribution's uniform-like appearance in 1D projections results from LHS-based placement of GMM component centers ensuring maximal separation. PARIS achieves this accuracy with dramatically fewer likelihood evaluations.*
-
-## Documentation
-
-📖 **[Visit the official documentation site](https://mx-liu123.github.io/parismc/)** for detailed usage guides, API reference, and examples.
 
 ## Features
 
@@ -274,6 +274,7 @@ If you use this software in your research, please cite:
 }
 
 ```
+
 
 
 
