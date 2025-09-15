@@ -47,13 +47,13 @@ def main():
     
     # Initialize sampler
     ndim = 2
-    n_walkers = 3
-    init_cov_list = [np.eye(ndim) * 0.05] * n_walkers
+    n_seed = 3
+    init_cov_list = [np.eye(ndim) * 0.05] * n_seed
     
     print("Initializing sampler...")
     sampler = Sampler(
         ndim=ndim,
-        n_seed=n_walkers,
+        n_seed=n_seed,
         log_density_func=log_density,
         init_cov_list=init_cov_list
         # No prior_transform needed for this simple example
@@ -140,3 +140,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
