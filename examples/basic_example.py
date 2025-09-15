@@ -30,8 +30,6 @@ def log_density(x):
     array-like, shape (n_samples,)
         Log-density values
     """
-    if x.ndim == 1:
-        x = x.reshape(1, -1)
     
     # Compute Mahalanobis distance
     diff = x - TRUE_MEAN
@@ -140,4 +138,5 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
