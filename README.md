@@ -180,6 +180,40 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)
 
 ## Advanced Usage
 
+## Multiprocessing Caveats
+
+- Windows/macOS and notebooks use the "spawn" start method. Always guard code with `if __name__ == "__main__":` when `use_pool=True`.
+- Define `log_density` and `prior_transform` at module top level. Avoid lambdas, inner functions, or closures; they are not pickleable for `multiprocessing.Pool`.
+- Notebooks: prefer `use_pool=False`. For parallel runs, move code into a `.py` script and run from the terminal.
+- Typical safe pattern:
+  ```python
+  # my_script.py
+  import numpy as np
+  from parismc import Sampler, SamplerConfig
+
+  def log_density(x):
+      x = np.atleast_2d(x)
+      return -0.5 * np.sum(x**2, axis=1)
+
+  def main():
+      ndim = 2; n_seed = 5
+      cfg = SamplerConfig(use_pool=True, n_pool=4)
+      sampler = Sampler(ndim, n_seed, log_density, [np.eye(ndim)*0.1]*n_seed, config=cfg)
+      sampler.prepare_lhs_samples(lhs_num=1000, batch_size=100)
+      sampler.run_sampling(num_iterations=500, savepath='./results')
+
+  if __name__ == "__main__":
+      import multiprocessing as mp
+      mp.freeze_support()               # Windows executables; harmless elsewhere
+      mp.set_start_method("spawn", force=True)  # Explicit, portable start method
+      main()
+  ```
+- Troubleshooting potential hangs:
+  - Script never starts or stalls at pool creation → add the main-guard and `set_start_method("spawn")` as above.
+  - Workers crash immediately → ensure `log_density` is top-level and returns `np.ndarray` of shape `(n,)`.
+  - Notebook hangs → disable multiprocessing (`use_pool=False`) or run as a script.
+  - Reduce `n_pool` to 1 to isolate pickling issues; then increase.
+
 ### Custom Prior Transform
 
 ```python
