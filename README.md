@@ -128,9 +128,12 @@ pip install -e .[dev]
 import numpy as np
 from parismc import Sampler, SamplerConfig
 
-# Define your log-likelihood function
+# Define your log-likelihood function (batched)
 def log_likelihood(x):
-    """Example: multivariate Gaussian log-likelihood"""
+    """Batched log-density: x has shape (n, ndim) and returns (n,).
+
+    For a single point, pass x as x[None, :] (shape (1, ndim)).
+    """
     return -0.5 * np.sum(x**2, axis=1)
 
 # Create sampler configuration
@@ -162,6 +165,18 @@ sampler.run_sampling(num_iterations=500, savepath='./results')
 # Get results
 samples, weights = sampler.get_samples_with_weights(flatten=True)
 ```
+
+**Log-Density Function Interface**
+
+- Input `x`: numpy array of shape `(n, ndim)`; return a 1D array of length `n` with log densities.
+- Single point: pass as `x[np.newaxis, :]` so shape is `(1, ndim)`.
+- Multiprocessing (`use_pool=True`): PARIS parallelizes evaluations across rows; write your function in a vectorized way over rows.
+- Convenience pattern to support both batched and accidental single-point calls:
+  ```python
+  def log_density(x):
+      x = np.atleast_2d(x)
+      return -0.5 * np.sum(x**2, axis=1)
+  ```
 
 ## Advanced Usage
 
