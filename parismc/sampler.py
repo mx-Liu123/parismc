@@ -263,7 +263,7 @@ class Sampler:
         
         self.loglike_normalization = selected_lhs_log_densities[0].copy()
         self.n_proc = self.n_seed
-        self.maximum_array_size = self.batch_point_num * num_iterations
+        self.maximum_array_size = int(self.batch_point_num * num_iterations)
 
         # Initialize lists
         for i in range(self.n_seed):
