@@ -6,44 +6,44 @@ import scipy.special as sps
 from scipy.stats import multivariate_normal
 
 def get_cluster_indices_cov(points, cov_matrices, dist=10):    
-    # Initialize clusters and visited points
+    # Initialize clusters and clustered points
     clusters = []
-    visited = set()
+    clustered = set()
     
     # Create clusters
     for point_index in range(len(points)):
-        if point_index not in visited:
-            cluster = find_points_within_threshold_cov(points, point_index, cov_matrices, visited, distance_threshold=dist)
+        if point_index not in clustered:
+            cluster = find_points_within_threshold_cov(points, point_index, cov_matrices, clustered, distance_threshold=dist)
             if len(cluster) > 1:
-                visited.update(cluster)
+                clustered.update(cluster)
                 clusters.append(cluster)
                 
     for point_index in range(len(points)):
-        if point_index not in visited:
-            visited.update([point_index])
+        if point_index not in clustered:
+            clustered.update([point_index])
             clusters.append([point_index])
 
     # Convert clusters to a list of indices
     cluster_indices = [list(set(cluster)) for cluster in clusters if cluster]  # Remove empty clusters
     return cluster_indices
 
-def find_points_within_threshold(points,point_index,visited,distance_threshold = None,kdtree = None):
+def find_points_within_threshold(points,point_index,clustered,distance_threshold = None,kdtree = None):
     neighbors = kdtree.query_ball_point(points[point_index], distance_threshold)
-    return [neighbor for neighbor in neighbors if neighbor not in visited]
+    return [neighbor for neighbor in neighbors if neighbor not in clustered]
     
 def get_cluster_indices(input_points, scale = np.array([1]), dist = 10):        
     # Build a KD-Tree for efficient nearest neighbor search
     points = input_points*scale[np.newaxis,:]
     kdtree = cKDTree(points)    
-    # Initialize clusters and visited points
+    # Initialize clusters and clustered points
     clusters = []
-    visited = set()
+    clustered = set()
     # Iterate through the points to create clusters
     for point_index in range(len(points)):
         
-        if point_index not in visited:
-            cluster = find_points_within_threshold(points,point_index,visited,distance_threshold = dist, kdtree = kdtree)
-            visited.update(cluster)
+        if point_index not in clustered:
+            cluster = find_points_within_threshold(points,point_index,clustered,distance_threshold = dist, kdtree = kdtree)
+            clustered.update(cluster)
             clusters.append(cluster)    
     # Convert clusters to a list of indices
     cluster_indices = [list(cluster) for cluster in clusters]
@@ -174,9 +174,9 @@ def mahalanobis_batch(points_neighbors, point, inv_cov):
     mahal_dist_sq = np.einsum('ij,jk,ik->i', diffs, inv_cov, diffs)
     return np.sqrt(mahal_dist_sq)
 
-def find_points_within_threshold_cov(points, point_index, cov_matrices, visited, distance_threshold=None):
+def find_points_within_threshold_cov(points, point_index, cov_matrices, clustered, distance_threshold=None):
     # Find all potential neighbors using KD-tree as a first filter
-    neighbors = [idx for idx in range(len(points)) if idx not in visited]
+    neighbors = [idx for idx in range(len(points)) if idx not in clustered]
     
     if not neighbors:
         return []  # No neighbors found
@@ -192,7 +192,7 @@ def find_points_within_threshold_cov(points, point_index, cov_matrices, visited,
     # Calculate the Mahalanobis distances for all neighbors in one step
     mahal_dists = mahalanobis_batch(points_neighbors, point, inv_cov)
     
-    # Filter neighbors based on distance threshold and visited status
+    # Filter neighbors based on distance threshold and clustered status
     filtered_neighbors = [neighbors[i] for i, dist in enumerate(mahal_dists) 
                           if dist <= distance_threshold]
 
@@ -201,3 +201,4 @@ def find_points_within_threshold_cov(points, point_index, cov_matrices, visited,
     #print('3',filtered_neighbors)    
 
     return filtered_neighbors
+
