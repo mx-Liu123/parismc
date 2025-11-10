@@ -185,7 +185,7 @@ class Sampler:
         self.wcoeff_list: List[np.ndarray] = []
         self.wdeno_list: List[np.ndarray] = []
         self.proposalcoeff_list: List[np.ndarray] = []
-        self.max_loglike_list: List[float] = []
+        self.max_logden_list: List[float] = []
         self.element_num_list: List[int] = []
         self.last_gaussian_points: List[np.ndarray] = []
         self.now_covariances: List[np.ndarray] = []
@@ -296,14 +296,14 @@ class Sampler:
         for j in range(self.n_proc):
             x = transformed_list[j]
             w = weights_list[j]
-            max_ll = self.max_loglike_list[j]
+            max_ld = self.max_logden_list[j]
             max_w = float(np.max(w)) if len(w) > 0 else float('nan')
             sum_w = float(np.sum(w)) if len(w) > 0 else float('nan')
             mean = np.average(x, weights=w, axis=0) if len(w) > 0 else np.full(self.ndim, np.nan)
             cov = np.cov(x, aweights=w, rowvar=False, ddof=0) if len(w) > 1 else np.full((self.ndim, self.ndim), np.nan)
             diag_cov = np.diag(cov)
             lines.append(f"process {j}:\n"
-                         f"  max_log_density: {max_ll}\n"
+                         f"  max_log_density: {max_ld}\n"
                          f"  max_importance_weight: {max_w}\n"
                          f"  sum_importance_weight: {sum_w}\n"
                          f"  weighted_mean: {mean.tolist()}\n"
@@ -388,7 +388,7 @@ class Sampler:
             self.searched_log_densities_list[i][:self.batch_point_num] = selected_lhs_log_densities[i]
             self.means_list[i][:self.batch_point_num] = selected_lhs_points_initial[i].reshape(-1, self.ndim)
             self.inv_covariances_list[i][:1] = np.linalg.inv(self.init_cov_list[i]).reshape(-1, self.ndim, self.ndim)
-            self.max_loglike_list.append(-np.inf)
+            self.max_logden_list.append(-np.inf)
             self.element_num_list.append(self.batch_point_num)
             self.call_num_list[i][:self.batch_point_num] += 1
             self.rej_num_list[i][:self.batch_point_num] += 1
@@ -550,9 +550,9 @@ class Sampler:
     
                 # Merging clusters
                 if i > 0:
-                    combined = sorted(zip(self.max_loglike_list, self.last_gaussian_points, self.searched_points_list, self.searched_log_densities_list, self.means_list, self.inv_covariances_list, self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.wdeno_list, self.element_num_list, self.now_covariances, self.now_normterms, self.proposalcoeff_list), reverse=True, key=lambda x: x[0])
+                    combined = sorted(zip(self.max_logden_list, self.last_gaussian_points, self.searched_points_list, self.searched_log_densities_list, self.means_list, self.inv_covariances_list, self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.wdeno_list, self.element_num_list, self.now_covariances, self.now_normterms, self.proposalcoeff_list), reverse=True, key=lambda x: x[0])
                     
-                    self.max_loglike_list, self.last_gaussian_points, self.searched_points_list, self.searched_log_densities_list, self.means_list, self.inv_covariances_list, self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.wdeno_list, self.element_num_list, self.now_covariances, self.now_normterms, self.proposalcoeff_list = zip(*combined)
+                    self.max_logden_list, self.last_gaussian_points, self.searched_points_list, self.searched_log_densities_list, self.means_list, self.inv_covariances_list, self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.wdeno_list, self.element_num_list, self.now_covariances, self.now_normterms, self.proposalcoeff_list = zip(*combined)
                     self.last_gaussian_points = list(np.array(self.last_gaussian_points))
                     cluster_indices = get_cluster_indices_cov(np.array(self.last_gaussian_points), self.now_covariances, dist=self.merge_dist)
                     cluster_indices = [sorted(sublist) for sublist in cluster_indices]
@@ -560,7 +560,7 @@ class Sampler:
                     lists_to_merge = [self.wdeno_list, self.searched_points_list, self.inv_covariances_list, self.gaussian_normterm_list, self.means_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list]
                     merged_lists, self.searched_log_densities_list = merge_arrays(lists_to_merge, cluster_indices, self.element_num_list, self.searched_log_densities_list, self.latest_prob_index, self.cov_update_count)
                     (self.wdeno_list, self.searched_points_list, self.inv_covariances_list, self.gaussian_normterm_list, self.means_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list) = merged_lists
-                    self.max_loglike_list = merge_max_list(self.max_loglike_list, cluster_indices)
+                    self.max_logden_list = merge_max_list(self.max_logden_list, cluster_indices)
                     self.element_num_list = merge_element_num_list(self.element_num_list, cluster_indices)
                     self.now_covariances = merge_max_list(self.now_covariances, cluster_indices)
                     self.now_normterms = merge_max_list(self.now_normterms, cluster_indices)
@@ -746,7 +746,7 @@ class Sampler:
                     self.means_list[j][ind1:ind2] = gaussian_means.copy()
                     self.proposalcoeff_list[j][ind1:ind2] = proposalcoeffs.copy()
                     self.element_num_list[j] += self.batch_point_num
-                    self.max_loglike_list[j] = max(self.max_loglike_list[j], gaussian_log_densities.max())
+                    self.max_logden_list[j] = max(self.max_logden_list[j], gaussian_log_densities.max())
 
                 # After updating element counts, check flags and optionally perform actions
                 try:
@@ -765,7 +765,7 @@ class Sampler:
                     logZ = c_term - np.log(Nsum) + np.log(wsum)
                     
                     # Report stats for the top process (processes are periodically sorted by max log-likelihood)
-                    status = f"samples: {Nsum}, evals: {calls}, processes: {self.n_proc}, cov: {self.now_covariances[0][0, 0]:.5e}, logZ: {logZ:.5f}, max_ll: {self.max_loglike_list[0]:.5f}"
+                    status = f"samples: {Nsum}, evals: {calls}, n_proc: {self.n_proc}, cov[0]: {self.now_covariances[0][0, 0]:.5e}, logZ: {logZ:.5f}, max_ld: {self.max_logden_list[0]:.5f}"
                     pbar.set_description(status)
                     pbar.update(self.print_iter)
     
