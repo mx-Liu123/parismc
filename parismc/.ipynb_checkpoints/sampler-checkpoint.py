@@ -3,7 +3,6 @@ from smt.sampling_methods import LHS
 from multiprocessing import Pool
 import pickle
 import os
-import json
 from scipy.stats import multivariate_normal
 import logging
 from typing import List, Optional, Callable, Tuple, Union
@@ -192,10 +191,6 @@ class Sampler:
         self.now_normterms: List[float] = []
         self.now_means: List[np.ndarray] = []
 
-        # Initialize flag file for external monitoring controls
-        self.flag_file = os.path.join('.', 'sampler_flags.json')
-        self._initialize_flag_file()
-
     def __del__(self) -> None:
         """Cleanup resources when object is destroyed."""
         if hasattr(self, 'pool') and self.pool is not None:
@@ -233,107 +228,6 @@ class Sampler:
         self.lhs_log_densities = lhs_log_densities
         logger.info(f"Prepared {lhs_num} LHS samples")
             
-    # --------------------
-    # Flag and action I/O
-    # --------------------
-    def _initialize_flag_file(self) -> None:
-        """Create or reset the flag file in current directory with default false flags."""
-        flags = {
-            "output_latest_samples": False,
-            "plot_latest_samples": False,
-            "print_latest_infos": False,
-        }
-        with open(self.flag_file, 'w', encoding='utf-8') as f:
-            json.dump(flags, f)
-
-    def _read_flags_fast(self) -> dict:
-        """Fast read of the small JSON flag file."""
-        with open(self.flag_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
-
-    def _write_flags(self, flags: dict) -> None:
-        """Write updated flags back to the JSON flag file."""
-        with open(self.flag_file, 'w', encoding='utf-8') as f:
-            json.dump(flags, f)
-
-    def _output_latest_samples(self) -> None:
-        """Save latest transformed samples and weights using np.save (separate files)."""
-        all_samples, all_weights = self.get_samples_with_weights(flatten=True)
-        np.save(os.path.join('.', 'latest_samples.npy'), all_samples)
-        np.save(os.path.join('.', 'latest_weights.npy'), all_weights)
-
-    def _compute_prior_bounds(self) -> List[Tuple[float, float]]:
-        """Compute per-dimension bounds from prior transform mapping of (0,1)."""
-        if self.prior_transform is None:
-            return [(0.0, 1.0) for _ in range(self.ndim)]
-        bounds: List[Tuple[float, float]] = []
-        for d in range(self.ndim):
-            u0 = np.full((1, self.ndim), 0.5, dtype=float)
-            u1 = np.full((1, self.ndim), 0.5, dtype=float)
-            u0[0, d] = 0.0
-            u1[0, d] = 1.0
-            x0 = self.apply_prior_transform(u0, self.prior_transform)[0]
-            x1 = self.apply_prior_transform(u1, self.prior_transform)[0]
-            bounds.append((x0[d], x1[d]))
-        return bounds
-
-    def _plot_latest_corner(self) -> None:
-        """Create a corner plot of transformed samples weighted by importance weights."""
-        # Lazy import to avoid overhead unless plotting is requested
-        import corner  # type: ignore
-        all_samples, all_weights = self.get_samples_with_weights(flatten=True)
-        ranges = self._compute_prior_bounds()
-        fig = corner.corner(all_samples, weights=all_weights, range=ranges)
-        fig.savefig(os.path.join('.', 'latest_corner.png'), dpi=150, bbox_inches='tight')
-        # Explicitly close to release resources
-        import matplotlib.pyplot as plt  # type: ignore
-        plt.close(fig)
-
-    def _print_latest_infos(self) -> None:
-        """Write per-process diagnostics to a text file based on transformed samples/weights."""
-        transformed_list, weights_list = self.get_samples_with_weights(flatten=False)
-        lines: List[str] = []
-        for j in range(self.n_proc):
-            x = transformed_list[j]
-            w = weights_list[j]
-            max_ll = self.max_loglike_list[j]
-            max_w = float(np.max(w)) if len(w) > 0 else float('nan')
-            sum_w = float(np.sum(w)) if len(w) > 0 else float('nan')
-            mean = np.average(x, weights=w, axis=0) if len(w) > 0 else np.full(self.ndim, np.nan)
-            cov = np.cov(x, aweights=w, rowvar=False, ddof=0) if len(w) > 1 else np.full((self.ndim, self.ndim), np.nan)
-            diag_cov = np.diag(cov)
-            lines.append(f"process {j}:\n"
-                         f"  max_log_density: {max_ll}\n"
-                         f"  max_importance_weight: {max_w}\n"
-                         f"  sum_importance_weight: {sum_w}\n"
-                         f"  weighted_mean: {mean.tolist()}\n"
-                         f"  weighted_cov_diag: {diag_cov.tolist()}\n"
-                         f"  weighted_cov:\n")
-            for r in range(self.ndim):
-                row = cov[r, :]
-                lines.append(f"    {row.tolist()}")
-        with open(os.path.join('.', 'latest_infos.txt'), 'w', encoding='utf-8') as f:
-            f.write('\n'.join(lines))
-
-    def _check_flags_and_take_actions(self) -> None:
-        """Read flags and perform actions, then reset taken flags to False."""
-        flags = self._read_flags_fast()
-        changed = False
-        if flags.get('output_latest_samples', False):
-            self._output_latest_samples()
-            flags['output_latest_samples'] = False
-            changed = True
-        if flags.get('plot_latest_samples', False):
-            self._plot_latest_corner()
-            flags['plot_latest_samples'] = False
-            changed = True
-        if flags.get('print_latest_infos', False):
-            self._print_latest_infos()
-            flags['print_latest_infos'] = False
-            changed = True
-        if changed:
-            self._write_flags(flags)
-
     def initialize_first_iteration(self, num_iterations: int,
                              external_lhs_points: Optional[np.ndarray] = None,
                              external_lhs_log_densities: Optional[np.ndarray] = None) -> None:
@@ -747,13 +641,7 @@ class Sampler:
                     self.proposalcoeff_list[j][ind1:ind2] = proposalcoeffs.copy()
                     self.element_num_list[j] += self.batch_point_num
                     self.max_loglike_list[j] = max(self.max_loglike_list[j], gaussian_log_densities.max())
-
-                # After updating element counts, check flags and optionally perform actions
-                try:
-                    self._check_flags_and_take_actions()
-                except Exception as e:
-                    logger.error(f"Flag actions failed: {e}")
-
+    
                 # Update diagnostics
                 if i % self.print_iter == 0:
                     c_term = self.loglike_normalization
