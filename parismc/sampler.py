@@ -191,6 +191,9 @@ class Sampler:
         self.now_covariances: List[np.ndarray] = []
         self.now_normterms: List[float] = []
         self.now_means: List[np.ndarray] = []
+        self._last_logZ_for_stop: Optional[float] = None
+        self._last_logZ_iter: Optional[int] = None
+        self._last_dlogZ: Optional[float] = None
 
         # Initialize flag file for external monitoring controls
         self.flag_file = os.path.join('.', 'sampler_flags.json')
@@ -442,9 +445,23 @@ class Sampler:
             self.maximum_array_size = required_size
 
     def run_sampling(self, num_iterations: int, savepath: str, print_iter: int = 1,
+                 stop_dlogZ: Optional[float] = None,
                  external_lhs_points: Optional[np.ndarray] = None,
                  external_lhs_log_densities: Optional[np.ndarray] = None) -> None:
-        """Run the sampling process for a specified number of iterations."""
+        """Run the sampling process for a specified number of iterations.
+
+        Parameters
+        ----------
+        num_iterations : int
+            Total number of iterations to execute.
+        savepath : str
+            Directory path for saving sampler state.
+        print_iter : int, optional
+            Progress update cadence.
+        stop_dlogZ : float, optional
+            Absolute difference threshold |logZ(i) - logZ(i-alpha)| to trigger early stopping;
+            disabled when None.
+        """
         if num_iterations <= 0:
             raise ValueError("num_iterations must be positive")
 
@@ -466,7 +483,11 @@ class Sampler:
             # Initialize additional variables used in the loop
             self.keep_trial_seeds = np.full(self.n_proc, True)
             self.eff_calls = 0        
-            num_iterations -= 1            
+            num_iterations -= 1
+            # Reset stopping trackers for fresh runs
+            self._last_logZ_for_stop = None
+            self._last_logZ_iter = None
+            self._last_dlogZ = None
         else:
             # If resuming from a previous run, check if arrays need to be extended
             self._extend_arrays_if_needed(num_iterations)
@@ -755,7 +776,10 @@ class Sampler:
                     logger.error(f"Flag actions failed: {e}")
 
                 # Update diagnostics
-                if i % self.print_iter == 0:
+                compute_logZ = (i % self.print_iter == 0) or (stop_dlogZ is not None and (i % self.alpha == 0))
+                logZ = None
+                dlogZ = None
+                if compute_logZ:
                     c_term = self.loglike_normalization
                     calls = sum(self.element_num_list)
                     ind1 = max(int(self.element_num_list[0] * (1 - self.EVIDENCE_ESTIMATION_FRACTION)), 0)
@@ -763,12 +787,30 @@ class Sampler:
                     wsum = sum(np.sum(np.exp(self.searched_log_densities_list[j][ind1:ind2] - c_term) / self.wdeno_list[j][ind1:ind2]) for j in range(self.n_proc)) * self.n_proc * (self.alpha * self.batch_point_num)
                     Nsum = sum(self.call_num_list[j][ind1:ind2].sum() for j in range(self.n_proc))
                     logZ = c_term - np.log(Nsum) + np.log(wsum)
-                    
+
+                    if stop_dlogZ is not None and (i % self.alpha == 0):
+                        if self._last_logZ_for_stop is not None and self._last_logZ_iter is not None and (i - self._last_logZ_iter) >= self.alpha:
+                            dlogZ = abs(logZ - self._last_logZ_for_stop)
+                            self._last_dlogZ = dlogZ
+                        self._last_logZ_for_stop = logZ
+                        self._last_logZ_iter = i
+
+                    display_dlogZ = self._last_dlogZ if self._last_dlogZ is not None else np.nan
+                    if dlogZ is not None:
+                        display_dlogZ = dlogZ
                     # Report stats for the top process (processes are periodically sorted by max log-likelihood)
-                    status = f"samples: {Nsum}, evals: {calls}, n_proc: {self.n_proc}, cov[0]: {self.now_covariances[0][0, 0]:.5e}, logZ: {logZ:.5f}, max_ld: {self.max_logden_list[0]:.5f}"
+                    status = f"samples: {Nsum}, evals: {calls}, n_proc: {self.n_proc}, cov[0]: {self.now_covariances[0][0, 0]:.5e}, logZ: {logZ:.5f}, dlogZ: {display_dlogZ:.5e}, max_ld: {self.max_logden_list[0]:.5f}"
                     pbar.set_description(status)
-                    pbar.update(self.print_iter)
-    
+                    if i % self.print_iter == 0:
+                        pbar.update(self.print_iter)
+
+                    if stop_dlogZ is not None and dlogZ is not None and dlogZ <= stop_dlogZ:
+                        self.current_iter = i + 1
+                        stop_message = f"Early stopping at iter {i}: dlogZ={dlogZ:.5e} <= stop_dlogZ={stop_dlogZ:.5e}, logZ={logZ:.5f}"
+                        logger.info(stop_message)
+                        print(stop_message)
+                        break
+
                 self.current_iter += 1
                 
                 # Clean up temporary variables to save memory

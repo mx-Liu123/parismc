@@ -79,6 +79,7 @@ def main():
         num_iterations=100,
         savepath='./basic_results',
         print_iter=20,
+        stop_dlogZ=0.1,
         external_lhs_points=external_lhs_points,
         external_lhs_log_densities=external_lhs_log_densities,
     )

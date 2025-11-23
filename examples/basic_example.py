@@ -63,7 +63,7 @@ def main():
     
     # Run sampling
     print("Running sampling...")
-    sampler.run_sampling(num_iterations=100, savepath='./basic_results', print_iter=20)
+    sampler.run_sampling(num_iterations=100, savepath='./basic_results', print_iter=20, stop_dlogZ=0.1)
     
     # Get results
     print("Extracting results...")

@@ -1,1 +1,5 @@
 examples/multimodal_results/
+# Ignore all non-Python files under examples
+examples/**
+!examples/**/
+!examples/**/*.py

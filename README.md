@@ -160,7 +160,10 @@ sampler = Sampler(
 sampler.prepare_lhs_samples(lhs_num=1000, batch_size=100)
 
 # Run sampling
-sampler.run_sampling(num_iterations=500, savepath='./results')
+sampler.run_sampling(num_iterations=500, savepath='./results', stop_dlogZ=0.1)
+
+# Optional: tune the evidence stability threshold (default None disables)
+# sampler.run_sampling(num_iterations=500, savepath='./results', stop_dlogZ=0.1)
 
 # Get results
 samples, weights = sampler.get_samples_with_weights(flatten=True)
@@ -200,7 +203,7 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)
       cfg = SamplerConfig(use_pool=True, n_pool=4)
       sampler = Sampler(ndim, n_seed, log_density, [np.eye(ndim)*0.1]*n_seed, config=cfg)
       sampler.prepare_lhs_samples(lhs_num=1000, batch_size=100)
-      sampler.run_sampling(num_iterations=500, savepath='./results')
+      sampler.run_sampling(num_iterations=500, savepath='./results', stop_dlogZ=0.1)
 
   if __name__ == "__main__":
       import multiprocessing as mp
@@ -267,7 +270,7 @@ config = SamplerConfig(
 ### Key Methods
 
 - `prepare_lhs_samples()`: Initialize with Latin Hypercube Sampling
-- `run_sampling()`: Execute the sampling process
+- `run_sampling(num_iterations, savepath, print_iter=1, stop_dlogZ=None)`: Execute the sampling process; if `stop_dlogZ` is set, stop when `|logZ(i) - logZ(i-alpha)| <= stop_dlogZ` (checked every `alpha` iterations)
 - `get_samples_with_weights()`: Retrieve samples and importance weights
 - `save_state()` / `load_state()`: State persistence
 

@@ -484,7 +484,8 @@ def main():
         sampler.run_sampling(
             num_iterations=10000, 
             savepath=savepath,
-            print_iter=100  # Print progress every 100 iterations
+            print_iter=100,  # Print progress every 100 iterations
+            stop_dlogZ=0.1,
         )
         
         print("\nSampling completed successfully!")

@@ -225,7 +225,10 @@ sampler = Sampler(
 sampler.prepare_lhs_samples(lhs_num=1000, batch_size=100)
 
 # Run sampling
-sampler.run_sampling(num_iterations=500, savepath='./results')
+sampler.run_sampling(num_iterations=500, savepath='./results', stop_dlogZ=0.1)
+
+# Optional: stop automatically when log-evidence stabilizes across alpha iterations
+# sampler.run_sampling(num_iterations=500, savepath='./results', stop_dlogZ=0.1)
 
 # Get results
 samples, weights = sampler.get_samples_with_weights(flatten=True)</div>
@@ -364,12 +367,13 @@ config = SamplerConfig(
             <li><strong>batch_size</strong> (int): Size of batches for likelihood evaluation.</li>
         </ul>
 
-        <h5>run_sampling(num_iterations, savepath, print_iter=1)</h5>
-        <p>Execute the main sampling loop.</p>
+        <h5>run_sampling(num_iterations, savepath, print_iter=1, stop_dlogZ=None)</h5>
+        <p>Execute the main sampling loop; if <code>stop_dlogZ</code> is set, sampling stops when <code>|logZ(i) - logZ(i-alpha)|</code> is below the threshold (checked every <code>alpha</code> iterations).</p>
         <ul>
             <li><strong>num_iterations</strong> (int): Number of sampling iterations to run.</li>
             <li><strong>savepath</strong> (str): Directory path for saving intermediate results.</li>
             <li><strong>print_iter</strong> (int, optional): Print progress every N iterations.</li>
+            <li><strong>stop_dlogZ</strong> (float, optional): Early-stop threshold on evidence stability. Disabled when None.</li>
         </ul>
 
         <h5>get_samples_with_weights(flatten=False)</h5>

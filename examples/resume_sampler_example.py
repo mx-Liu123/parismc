@@ -119,6 +119,7 @@ def main():
         num_iterations=args.more_iters,
         savepath=out_dir,
         print_iter=args.print_iter,
+        stop_dlogZ=0.1,
     )
 
     print("\nResume completed. Summary after resume:")
@@ -141,4 +142,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
