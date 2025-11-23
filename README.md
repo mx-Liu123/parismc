@@ -225,6 +225,15 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)
   - `output_latest_samples`: write `latest_samples.npy` and `latest_weights.npy` (transformed space, flattened).
   - `plot_latest_samples`: write `latest_corner.png` (requires `corner` and `matplotlib`).
   - `print_latest_infos`: write `latest_infos.txt` with per-process diagnostics (weighted mean, covariance, max log-density/weights).
+- Quick toggle example from Python:
+  ```python
+  import json
+  with open("sampler_flags.json", "r", encoding="utf-8") as f:
+      flags = json.load(f)
+  flags["output_latest_samples"] = True
+  with open("sampler_flags.json", "w", encoding="utf-8") as f:
+      json.dump(flags, f)
+  ```
 
 ### Custom Prior Transform
 

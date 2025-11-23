@@ -396,6 +396,13 @@ config = SamplerConfig(
             <li><strong>plot_latest_samples</strong>: write <code>latest_corner.png</code> (requires <code>corner</code> and <code>matplotlib</code>).</li>
             <li><strong>print_latest_infos</strong>: write <code>latest_infos.txt</code> with per-process diagnostics (weighted mean/cov, max log-density/weights).</li>
         </ul>
+        <div class="code-block"><pre><code class="language-python"># Toggle a flag while sampling is running
+import json
+with open("sampler_flags.json", "r", encoding="utf-8") as f:
+    flags = json.load(f)
+flags["output_latest_samples"] = True
+with open("sampler_flags.json", "w", encoding="utf-8") as f:
+    json.dump(flags, f)</code></pre></div>
 
         <h3>Utility Functions</h3>
         

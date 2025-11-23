@@ -330,6 +330,15 @@ config = SamplerConfig(
   - `output_latest_samples`: write `latest_samples.npy` and `latest_weights.npy`
   - `plot_latest_samples`: write `latest_corner.png` (requires `corner`/`matplotlib`)
   - `print_latest_infos`: write `latest_infos.txt` with per-process diagnostics; flags reset to `false` after one use
+  - Quick toggle (while running):
+    ```python
+    import json
+    with open("sampler_flags.json", "r", encoding="utf-8") as f:
+        flags = json.load(f)
+    flags["output_latest_samples"] = True
+    with open("sampler_flags.json", "w", encoding="utf-8") as f:
+        json.dump(flags, f)
+    ```
 
 #### Loading a Saved Sampler
 
@@ -381,6 +390,5 @@ If you use this software in your research, please cite:
 }
 
 ```
-
 
 
