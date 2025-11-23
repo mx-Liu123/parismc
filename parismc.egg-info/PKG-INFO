@@ -326,6 +326,10 @@ config = SamplerConfig(
 - `run_sampling(num_iterations, savepath, print_iter=1, stop_dlogZ=None)`: Execute the sampling process; if `stop_dlogZ` is set, stop when `|logZ(i) - logZ(i-alpha)| <= stop_dlogZ` (checked every `alpha` iterations)
 - `get_samples_with_weights()`: Retrieve samples and importance weights
 - `save_state()` / `load_state()`: State persistence
+- Runtime flag file `sampler_flags.json` (created/reset when sampling starts) supports:
+  - `output_latest_samples`: write `latest_samples.npy` and `latest_weights.npy`
+  - `plot_latest_samples`: write `latest_corner.png` (requires `corner`/`matplotlib`)
+  - `print_latest_infos`: write `latest_infos.txt` with per-process diagnostics; flags reset to `false` after one use
 
 #### Loading a Saved Sampler
 
@@ -377,7 +381,6 @@ If you use this software in your research, please cite:
 }
 
 ```
-
 
 
 

@@ -389,6 +389,14 @@ config = SamplerConfig(
             <li><strong>filename</strong> (str): Path to save/load state file.</li>
         </ul>
 
+        <h4>Runtime flag controls</h4>
+        <p>The sampler watches a JSON flag file in the working directory (<code>sampler_flags.json</code>) during <code>run_sampling</code>. Set a flag to <code>true</code> while it runs; the sampler performs the action once and resets the flag to <code>false</code>.</p>
+        <ul>
+            <li><strong>output_latest_samples</strong>: write <code>latest_samples.npy</code> and <code>latest_weights.npy</code> (transformed space, flattened).</li>
+            <li><strong>plot_latest_samples</strong>: write <code>latest_corner.png</code> (requires <code>corner</code> and <code>matplotlib</code>).</li>
+            <li><strong>print_latest_infos</strong>: write <code>latest_infos.txt</code> with per-process diagnostics (weighted mean/cov, max log-density/weights).</li>
+        </ul>
+
         <h3>Utility Functions</h3>
         
         <h4>find_sigma_level(ndim, prob)</h4>

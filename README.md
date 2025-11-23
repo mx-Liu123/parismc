@@ -217,6 +217,15 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)
   - Notebook hangs → disable multiprocessing (`use_pool=False`) or run as a script.
   - Reduce `n_pool` to 1 to isolate pickling issues; then increase.
 
+### Runtime flag controls
+
+- `sampler_flags.json` is created/reset in the working directory when `run_sampling` starts.
+- Toggle a flag to `true` while the sampler is running; it will execute the action once and reset the flag to `false`.
+- Available flags:
+  - `output_latest_samples`: write `latest_samples.npy` and `latest_weights.npy` (transformed space, flattened).
+  - `plot_latest_samples`: write `latest_corner.png` (requires `corner` and `matplotlib`).
+  - `print_latest_infos`: write `latest_infos.txt` with per-process diagnostics (weighted mean, covariance, max log-density/weights).
+
 ### Custom Prior Transform
 
 ```python
