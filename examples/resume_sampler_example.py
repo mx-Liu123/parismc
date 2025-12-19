@@ -1,6 +1,4 @@
 """
-继续运行已保存的 Sampler 示例（在加载后继续采样）
-
 Resume a saved PARIS sampler and continue sampling for more iterations.
 
 This complements examples/load_sampler_example.py which focuses on
