@@ -11,21 +11,13 @@ This example demonstrates:
 
 import numpy as np
 import os
+import time
 from scipy.special import logsumexp
 from parismc import Sampler, SamplerConfig
 
 # Define modes at module level to avoid pickle issues
 MODES = np.array([
-    [0.85, 0.05, 0.85, 0.65, 0.05, 0.45, 0.55, 0.85, 0.45, 0.65],
-    [0.45, 0.75, 0.25, 0.35, 0.45, 0.95, 0.45, 0.65, 0.95, 0.85],
-    [0.05, 0.95, 0.35, 0.15, 0.95, 0.75, 0.65, 0.25, 0.25, 0.35],
-    [0.15, 0.65, 0.55, 0.05, 0.55, 0.25, 0.25, 0.95, 0.15, 0.75],
-    [0.95, 0.45, 0.15, 0.25, 0.15, 0.35, 0.85, 0.45, 0.65, 0.55],
-    [0.65, 0.55, 0.75, 0.95, 0.35, 0.55, 0.05, 0.75, 0.75, 0.25],
-    [0.35, 0.35, 0.95, 0.55, 0.65, 0.15, 0.35, 0.55, 0.05, 0.95],
-    [0.75, 0.15, 0.05, 0.85, 0.85, 0.85, 0.75, 0.15, 0.55, 0.05],
-    [0.55, 0.25, 0.45, 0.45, 0.25, 0.05, 0.15, 0.05, 0.35, 0.45],
-    [0.25, 0.85, 0.65, 0.75, 0.75, 0.65, 0.95, 0.35, 0.85, 0.15]
+    [0.5, 0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5],
 ])
 
 WEIGHTS = np.array([1.0] * len(MODES))
@@ -420,18 +412,27 @@ def create_corner_plot(samples, weights, savepath, max_dims=4):
     except:
         pass
 
-def main():
+def run_experiment(merge_type, run_id):
     """
-    Main function to run the multimodal sampling example.
-    """
-    print("Multimodal 10D Sampling Example")
-    print("===============================")
+    Run a single experiment with specified merge strategy.
     
+    Parameters:
+    ----------
+    merge_type : str
+        Merge strategy: 'distance', 'single', or 'multiple'
+    run_id : int
+        Identifier for the current run
+        
+    Returns:
+    -------
+    int
+        Number of iterations until merge or completion
+    """
     # Problem setup
     ndim = 10
-    n_seed = 100  # Number of initial processes
+    n_seed = 2  # Number of initial processes
     sigma = 0.01  # Initial covariance scale
-    savepath = './multimodal_results/'
+    savepath = f'./multimodal_results/run_{run_id}_{merge_type}/'
     
     # Create save directory
     os.makedirs(savepath, exist_ok=True)
@@ -441,29 +442,23 @@ def main():
     for i in range(n_seed):
         init_cov_list.append(sigma**2 * np.eye(ndim))
     
-    # Configure sampler for challenging multimodal problem
+    # Configure sampler
     config = SamplerConfig(
-        merge_confidence=0.9,          # Coverage prob → Mahalanobis merge radius R_m (higher is more permissive)
-        alpha=1000,                    # Use recent samples for weighting
-        trail_size=int(1e3),          # Maximum trials per iteration
-        boundary_limiting=True,        # Enable boundary constraints
-        use_beta=True,                # Use beta correction for boundaries
-        integral_num=int(1e5),        # MC samples for beta estimation
-        gamma=100,                    # Covariance update frequency
-        exclude_scale_z=np.inf,       # No exclusion based on weights
-        use_pool=False,               # Set to True for multiprocessing
-        n_pool=4,                      # Number of processes (if use_pool=True)
-        distance_merge=False
+        merge_confidence=0.9,
+        alpha=1000,
+        trail_size=int(1e3),
+        boundary_limiting=True,
+        use_beta=True,
+        integral_num=int(1e5),
+        gamma=100,
+        exclude_scale_z=np.inf,
+        use_pool=False,
+        n_pool=4,
+        merge_type=merge_type,       # Controlled by argument
+        stop_on_merge=True           # Always stop on merge for this experiment
     )
     
-    print(f"Problem dimension: {ndim}")
-    print(f"Number of processes: {n_seed}")
-    print(f"Initial covariance scale: {sigma}")
-    print(f"Save path: {savepath}")
-    print(f"Multiprocessing: {config.use_pool}")
-    
     # Initialize sampler
-    print("\nInitializing sampler...")
     sampler = Sampler(
         ndim=ndim, 
         n_seed=n_seed,
@@ -473,46 +468,75 @@ def main():
         config=config
     )
     
-    # Prepare initial samples using Latin Hypercube Sampling
-    print("Preparing LHS samples...")
-    sampler.prepare_lhs_samples(lhs_num=int(1e5), batch_size=100)
-    
-    # Run the sampling process
-    print("Starting sampling process...")
-    print("(This may take several minutes for 10,000 iterations)")
+    # Prepare initial samples
+    external_lhs_points = np.zeros((n_seed, ndim)) + 0.4
+    external_lhs_points[1, :] = 0.6
+    external_lhs_log_densities = log_density(external_lhs_points)
     
     try:
+        start_time = time.time()
+        # Suppress output for cleaner experiment logs
         sampler.run_sampling(
             num_iterations=10000, 
             savepath=savepath,
-            print_iter=100,  # Print progress every 100 iterations
+            print_iter=10000,  # Minimal printing
             stop_dlogZ=0.01,
+            external_lhs_points=external_lhs_points,
+            external_lhs_log_densities=external_lhs_log_densities
         )
+        end_time = time.time()
         
-        print("\nSampling completed successfully!")
+        final_iter = sampler.current_iter
+        total_time = end_time - start_time
+        avg_time_per_iter = total_time / final_iter if final_iter > 0 else 0.0
         
-        # Analyze results
-        analyze_results(sampler, savepath)
-        
-        # Create visualizations
-        visualize_marginal_distributions(sampler, savepath)
-        
+        return final_iter, avg_time_per_iter
+    
     except KeyboardInterrupt:
-        print("\nSampling interrupted by user.")
-        print("Partial results have been saved.")
-        if hasattr(sampler, 'searched_points_list'):
-            analyze_results(sampler, savepath)
-            try:
-                visualize_marginal_distributions(sampler, savepath)
-            except:
-                print("Could not create visualizations with partial results.")
-    
+        raise  # Re-raise to stop the entire experiment loop
+        
     except Exception as e:
-        print(f"\nError during sampling: {e}")
-        raise
+        print(f"Run {run_id} ({merge_type}) failed: {e}")
+        return 10000, 0.0
+
+def main():
+    """
+    Run the comparison experiment.
+    """
+    exp_n = 10
+    print(f"Running comparison experiment with {exp_n} runs each...")
+    print("="*60)
     
-    print(f"\nResults saved to: {savepath}")
-    print("Example completed!")
+    merge_types = ['multiple'] # Only run for 'multiple'
+    #merge_types = ['distance','single']
+    results = {}
+    time_results = {}
+
+    for m_type in merge_types:
+        print(f"\nTesting merge_type = '{m_type}'")
+        results[m_type] = []
+        time_results[m_type] = []
+        for i in range(exp_n):
+            iter_count, avg_time = run_experiment(m_type, i)
+            results[m_type].append(iter_count)
+            time_results[m_type].append(avg_time)
+            # print(f"Run {i+1}/{exp_n}: Merged at iteration {iter_count}") # Suppress per-run output for large exp_n
+        print(f"Completed {exp_n} runs for merge_type = '{m_type}'.") # Add summary output
+    
+    print("\n" + "="*60)
+    print("EXPERIMENT RESULTS")
+    print("="*60)
+    
+    for m_type in merge_types:
+        mean_iter = np.mean(results[m_type])
+        std_iter = np.std(results[m_type])
+        mean_time = np.mean(time_results[m_type])
+        print(f"merge_type = '{m_type:<10}' (n={exp_n}):")
+        print(f"  Mean Iterations: {mean_iter:.2f}")
+        print(f"  Std Iterations:  {std_iter:.2f}")
+        print(f"  Mean Time/Iter:  {mean_time:.6f} s")
+    
+    print("="*60)
 
 if __name__ == "__main__":
 

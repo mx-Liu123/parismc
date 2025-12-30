@@ -3,3 +3,4 @@ examples/multimodal_results/
 examples/**
 !examples/**/
 !examples/**/*.py
+merge_exp/

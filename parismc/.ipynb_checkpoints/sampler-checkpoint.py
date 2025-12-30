@@ -62,6 +62,8 @@ class SamplerConfig:
     exclude_scale_z: float = np.inf
     use_pool: bool = False
     n_pool: int = 10
+    stop_on_merge: bool = False
+    merge_type: str = 'distance' # 'distance', 'single', or 'multiple'
 
 class Sampler:
     """
@@ -157,13 +159,18 @@ class Sampler:
         self.exclude_scale_z = config.exclude_scale_z
         self.use_pool = config.use_pool
         self.n_pool = config.n_pool
+        self.stop_on_merge = config.stop_on_merge
+        self.merge_type = config.merge_type
         
+        if self.merge_type not in ['distance', 'single', 'multiple']:
+             raise ValueError(f"Invalid merge_type: {self.merge_type}. Must be 'distance', 'single', or 'multiple'.")
+
         self.batch_point_num = 1
         self.cov_update_count = self.batch_point_num * self.gamma
         # Mahalanobis merge threshold R_m derived from coverage probability p
         # R_m = find_sigma_level(ndim, p). Higher p → larger R_m.
         # p=0 => R_m=0; p→1 => R_m→∞. See SamplerConfig notes.
-        self.merge_dist = find_sigma_level(self.ndim, self.merge_confidence)
+        self.merge_dist = 4#find_sigma_level(self.ndim, self.merge_confidence)
         self.current_iter = 0
         self.loglike_normalization = None
         self.n_proc = None
@@ -191,6 +198,9 @@ class Sampler:
         self.now_covariances: List[np.ndarray] = []
         self.now_normterms: List[float] = []
         self.now_means: List[np.ndarray] = []
+        self._last_logZ_for_stop: Optional[float] = None
+        self._last_logZ_iter: Optional[int] = None
+        self._last_dlogZ: Optional[float] = None
 
         # Initialize flag file for external monitoring controls
         self.flag_file = os.path.join('.', 'sampler_flags.json')
@@ -232,6 +242,66 @@ class Sampler:
         self.lhs_points_initial = x
         self.lhs_log_densities = lhs_log_densities
         logger.info(f"Prepared {lhs_num} LHS samples")
+
+    def _compute_weight_segment(self, points, param_idx, start_idx, end_idx, cov_mode="single", cov_ref_idx=None):
+        """
+        Computes the weighting segment.
+        
+        Args:
+            points (np.ndarray): The points to evaluate (from population j).
+            param_idx (int): The index of the population providing parameters (j or j_prime).
+                             Used to access means_list, inv_covariances_list, etc.
+            start_idx (int): Start index for slicing parameter lists.
+            end_idx (int): End index for slicing parameter lists.
+            cov_mode (str): 'single' or 'multi'.
+            cov_ref_idx (int, optional): Index for covariance if mode is 'single'.
+
+        Returns:
+            np.ndarray: The calculated addon weights.
+        """
+        # --- Data Preparation ---
+        
+        # 1. Slice means and proposal coefficients from the parameter source (param_idx)
+        means_cache = self.means_list[param_idx][start_idx:end_idx]
+        proposalcoeff_cache = self.proposalcoeff_list[param_idx][start_idx:end_idx]
+
+        # 2. Prepare covariance matrices from the parameter source (param_idx)
+        if cov_mode == "multi":
+            # Case: Multiple covariance matrices
+            index_array = np.arange(start_idx, end_idx) // self.cov_update_count
+            inv_covariances_cache = self.inv_covariances_list[param_idx][index_array]
+            norm_terms_cache = self.gaussian_normterm_list[param_idx][index_array]
+            compute_func = weighting_seeds_manycov
+        else:
+            # Case: Single covariance matrix
+            inv_covariances_cache = self.inv_covariances_list[param_idx][cov_ref_idx]
+            norm_terms_cache = self.gaussian_normterm_list[param_idx][cov_ref_idx]
+            compute_func = weighting_seeds_manypoint
+
+        # --- Calculation (Multiprocessing vs Serial) ---
+        
+        if self.use_pool and self.pool is not None:
+            # Prepare arguments for starmap
+            points_list = [points] * self.n_pool
+            means_list = np.array_split(means_cache, self.n_pool)
+            proposalcoeff_list = np.array_split(proposalcoeff_cache, self.n_pool)
+
+            if cov_mode == "multi":
+                inv_cov_list = np.array_split(inv_covariances_cache, self.n_pool)
+                norm_list = np.array_split(norm_terms_cache, self.n_pool)
+            else:
+                inv_cov_list = [inv_covariances_cache] * self.n_pool
+                norm_list = [norm_terms_cache] * self.n_pool
+
+            results = self.pool.starmap(compute_func, zip(
+                points_list, means_list, inv_cov_list, norm_list, proposalcoeff_list
+            ))
+            return np.concatenate(results)
+        else:
+            return compute_func(
+                points, means_cache, inv_covariances_cache, 
+                norm_terms_cache, proposalcoeff_cache
+            )        
             
     # --------------------
     # Flag and action I/O
@@ -442,9 +512,23 @@ class Sampler:
             self.maximum_array_size = required_size
 
     def run_sampling(self, num_iterations: int, savepath: str, print_iter: int = 1,
+                 stop_dlogZ: Optional[float] = None,
                  external_lhs_points: Optional[np.ndarray] = None,
                  external_lhs_log_densities: Optional[np.ndarray] = None) -> None:
-        """Run the sampling process for a specified number of iterations."""
+        """Run the sampling process for a specified number of iterations.
+
+        Parameters
+        ----------
+        num_iterations : int
+            Total number of iterations to execute.
+        savepath : str
+            Directory path for saving sampler state.
+        print_iter : int, optional
+            Progress update cadence.
+        stop_dlogZ : float, optional
+            Absolute difference threshold |logZ(i) - logZ(i-alpha)| to trigger early stopping;
+            disabled when None.
+        """
         if num_iterations <= 0:
             raise ValueError("num_iterations must be positive")
 
@@ -466,7 +550,11 @@ class Sampler:
             # Initialize additional variables used in the loop
             self.keep_trial_seeds = np.full(self.n_proc, True)
             self.eff_calls = 0        
-            num_iterations -= 1            
+            num_iterations -= 1
+            # Reset stopping trackers for fresh runs
+            self._last_logZ_for_stop = None
+            self._last_logZ_iter = None
+            self._last_dlogZ = None
         else:
             # If resuming from a previous run, check if arrays need to be extended
             self._extend_arrays_if_needed(num_iterations)
@@ -475,6 +563,12 @@ class Sampler:
             pbar = tqdm(total=num_iterations, initial=0, desc="Sampling")
             
             for i in range(self.current_iter, self.current_iter + num_iterations):
+                # Dynamic normalization update to prevent overflow
+                if len(self.max_logden_list) > 0:
+                    max_so_far = max(self.max_logden_list)
+                    if max_so_far > self.loglike_normalization:
+                         self.loglike_normalization = max_so_far
+
                 points_list = []
                 probabilities_list = []
     
@@ -486,77 +580,136 @@ class Sampler:
                         points_list.append(self.searched_points_list[j][ind1:ind2])
                         probabilities_list.append(np.exp(self.searched_log_densities_list[j][ind1:ind2] - self.loglike_normalization))
     
-                        # Weighting Part 1: New proposals
+                        # 1. New proposals (Single Covariance)
                         ind1_newproposals = max(ind2 - self.batch_point_num, 0)
-                        means_cache = self.means_list[j][ind1_newproposals:ind2]
-                        proposalcoeff_cache = self.proposalcoeff_list[j][ind1_newproposals:ind2]
-                        inv_covariances_cache = self.inv_covariances_list[j][int((ind2 - 1) / self.cov_update_count)]
-                        norm_terms_cache = self.gaussian_normterm_list[j][int((ind2 - 1) / self.cov_update_count)]
-                        
-                        if self.use_pool and self.pool is not None:
-                            # Multiprocessing logic
-                            points_j_list = [points_list[j]] * self.n_pool
-                            means_cache_list = np.array_split(means_cache, self.n_pool)
-                            inv_covariances_cache_list = [inv_covariances_cache] * self.n_pool
-                            norm_terms_cache_list = [norm_terms_cache] * self.n_pool
-                            proposalcoeff_cache_list = np.array_split(proposalcoeff_cache, self.n_pool)
-                            results = self.pool.starmap(weighting_seeds_manypoint, zip(points_j_list, means_cache_list, inv_covariances_cache_list, norm_terms_cache_list, proposalcoeff_cache_list))
-                            self.wdeno_list[j][ind1:ind2] += np.concatenate(results)
-                        else:
-                            addon_weights = weighting_seeds_manypoint(points_list[j], means_cache, inv_covariances_cache, norm_terms_cache, proposalcoeff_cache)
-                            self.wdeno_list[j][ind1:ind2] += addon_weights.copy()
-    
-                        # Weighting Part 2: New points with old proposals
+                        addon_weights = self._compute_weight_segment(
+                            points=points_list[j], 
+                            param_idx=j,  # <--- param source is j
+                            start_idx=ind1_newproposals, end_idx=ind2,
+                            cov_mode="single", cov_ref_idx=int((ind2 - 1) / self.cov_update_count)
+                        )
+                        self.wdeno_list[j][ind1:ind2] += addon_weights
+                
+                        # 2. New points with old proposals (Multi Covariance)
                         ind2_oldproposals = self.element_num_list[j] - self.batch_point_num
-                        means_cache = self.means_list[j][ind1:ind2_oldproposals]
-                        proposalcoeff_cache = self.proposalcoeff_list[j][ind1:ind2_oldproposals]
-                        index_array = np.arange(ind1, ind2_oldproposals) // self.cov_update_count
-                        inv_covariances_cache = self.inv_covariances_list[j][index_array]
-                        norm_terms_cache = self.gaussian_normterm_list[j][index_array]
-                        points_cache = self.searched_points_list[j][ind2_oldproposals:ind2]
-                        
-                        if self.use_pool and self.pool is not None:
-                            points_j_list = [points_cache] * self.n_pool
-                            means_cache_list = np.array_split(means_cache, self.n_pool)
-                            inv_covariances_cache_list = np.array_split(inv_covariances_cache, self.n_pool)
-                            norm_terms_cache_list = np.array_split(norm_terms_cache, self.n_pool)
-                            proposalcoeff_cache_list = np.array_split(proposalcoeff_cache, self.n_pool)
-                            results = self.pool.starmap(weighting_seeds_manycov, zip(points_j_list, means_cache_list, inv_covariances_cache_list, norm_terms_cache_list, proposalcoeff_cache_list))
-                            self.wdeno_list[j][ind2_oldproposals:ind2] += np.concatenate(results)
-                        else:
-                            addon_weights = weighting_seeds_manycov(points_cache, means_cache, inv_covariances_cache, norm_terms_cache, proposalcoeff_cache)
-                            self.wdeno_list[j][ind2_oldproposals:ind2] += addon_weights.copy()
-    
-                        # Weighting Part 3: Subtracting for old proposals
+                        addon_weights = self._compute_weight_segment(
+                            points=self.searched_points_list[j][ind2_oldproposals:ind2],
+                            param_idx=j,  # <--- param source is j
+                            start_idx=ind1, end_idx=ind2_oldproposals,
+                            cov_mode="multi"
+                        )
+                        self.wdeno_list[j][ind2_oldproposals:ind2] += addon_weights
+                
+                        # 3. Subtracting for old proposals (Single Covariance)
                         if ind1 > 0:
                             ind1_oldproposals = max(ind1 - self.batch_point_num, 0)
-                            means_cache = self.means_list[j][ind1_oldproposals:ind1]
-                            proposalcoeff_cache = self.proposalcoeff_list[j][ind1_oldproposals:ind1]
-                            inv_covariances_cache = self.inv_covariances_list[j][int((ind1 - 1) / self.cov_update_count)]
-                            norm_terms_cache = self.gaussian_normterm_list[j][int((ind1 - 1) / self.cov_update_count)]
-                            points_cache = self.searched_points_list[j][ind1:ind2_oldproposals]
-                            
-                            if self.use_pool and self.pool is not None:
-                                points_j_list = [points_cache] * self.n_pool
-                                means_cache_list = np.array_split(means_cache, self.n_pool)
-                                inv_covariances_cache_list = [inv_covariances_cache] * self.n_pool
-                                norm_terms_cache_list = [norm_terms_cache] * self.n_pool
-                                proposalcoeff_cache_list = np.array_split(proposalcoeff_cache, self.n_pool)
-                                results = self.pool.starmap(weighting_seeds_manypoint, zip(points_j_list, means_cache_list, inv_covariances_cache_list, norm_terms_cache_list, proposalcoeff_cache_list))
-                                self.wdeno_list[j][ind1:ind2_oldproposals] -= np.concatenate(results)
-                            else:
-                                addon_weights = weighting_seeds_manypoint(points_cache, means_cache, inv_covariances_cache, norm_terms_cache, proposalcoeff_cache)
-                                self.wdeno_list[j][ind1:ind2_oldproposals] -= addon_weights.copy()
-    
-                # Merging clusters
+                            addon_weights = self._compute_weight_segment(
+                                points=self.searched_points_list[j][ind1:ind2_oldproposals],
+                                param_idx=j,  # <--- param source is j
+                                start_idx=ind1_oldproposals, end_idx=ind1,
+                                cov_mode="single", cov_ref_idx=int((ind1 - 1) / self.cov_update_count)
+                            )
+                            self.wdeno_list[j][ind1:ind2_oldproposals] -= addon_weights
+
+                # Merging clusters logic
                 if i > 0:
+                    # 1. Sort processes by max log density
                     combined = sorted(zip(self.max_logden_list, self.last_gaussian_points, self.searched_points_list, self.searched_log_densities_list, self.means_list, self.inv_covariances_list, self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.wdeno_list, self.element_num_list, self.now_covariances, self.now_normterms, self.proposalcoeff_list), reverse=True, key=lambda x: x[0])
                     
                     self.max_logden_list, self.last_gaussian_points, self.searched_points_list, self.searched_log_densities_list, self.means_list, self.inv_covariances_list, self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.wdeno_list, self.element_num_list, self.now_covariances, self.now_normterms, self.proposalcoeff_list = zip(*combined)
-                    self.last_gaussian_points = list(np.array(self.last_gaussian_points))
-                    cluster_indices = get_cluster_indices_cov(np.array(self.last_gaussian_points), self.now_covariances, dist=self.merge_dist)
-                    cluster_indices = [sorted(sublist) for sublist in cluster_indices]
+
+                    # 2. Determine Cluster Indices (Strategy Selection)
+                    cluster_indices = []
+
+                    # 2. Determine Cluster Indices (Strategy Selection)
+                    cluster_indices = []
+
+                    if self.merge_type == 'distance':
+                        # --- Strategy A: Distance-based Merging ---
+                        self.last_gaussian_points = list(np.array(self.last_gaussian_points))
+                        cluster_indices = get_cluster_indices_cov(np.array(self.last_gaussian_points), self.now_covariances, dist=self.merge_dist)
+                        cluster_indices = [sorted(sublist) for sublist in cluster_indices]
+                    else:
+                        # --- Strategy B/C: Weight-based Merging (Cross-proc check) ---
+                        classified_indices = set()
+                        new_clusters = []
+                        
+                        # Greedy Pairwise Merging
+                        for j in range(self.n_proc):
+                            if j in classified_indices:
+                                continue # Already handled
+                                
+                            found_merge = False
+                            for j_prime in range(self.n_proc):
+                                if j == j_prime or j_prime in classified_indices:
+                                    continue 
+
+                                # Prepare data for cross-check
+                                ind1 = max(-self.latest_prob_index + self.element_num_list[j_prime], 0)
+                                ind2 = self.element_num_list[j_prime]
+                                
+                                # Evaluate j's latest points using j_prime's parameters
+                                if self.merge_type == 'single':
+                                    target_end = self.element_num_list[j]
+                                    target_start = max(0, target_end - self.batch_point_num)
+                                elif self.merge_type == 'multiple':
+                                    target_end = self.element_num_list[j]
+                                    target_start = 0#max(0, target_end - self.alpha)
+                                else:
+                                    # Should not happen given outer check, but safe fallback
+                                    target_end = self.element_num_list[j]
+                                    target_start = max(0, target_end - self.batch_point_num)
+
+                                points_to_eval = self.searched_points_list[j][target_start:target_end]
+
+                                addon_weights = self._compute_weight_segment(
+                                    points=points_to_eval,
+                                    param_idx=j_prime, 
+                                    start_idx=ind1, 
+                                    end_idx=ind2, 
+                                    cov_mode="multi" 
+                                )
+                                
+                                # Compare j_prime's contribution vs j's own contribution
+                                current_weights = self.wdeno_list[j][target_start:target_end]
+                                
+                                # Merge Condition
+                                if self.merge_type == 'single':
+                                    # Strategy B: Average Weight Comparison
+                                    if np.mean(addon_weights) >= np.mean(current_weights):
+                                        new_clusters.append([j, j_prime])
+                                        classified_indices.add(j)
+                                        classified_indices.add(j_prime)
+                                        found_merge = True
+                                        break 
+                                elif self.merge_type == 'multiple':
+                                    # Strategy C: Pointwise Density Comparison (>= 10% points)
+                                    # Check if proposal_j'(x) > proposal_j(x) for at least 10% of points
+                                    # addon_weights corresponds to proposal_j'(x) (approx/unnormalized density contribution)
+                                    # current_weights corresponds to proposal_j(x)
+                                    better_count = np.sum(addon_weights > current_weights/1)
+                                    if len(addon_weights) > 0 and better_count>0:#better_count / len(addon_weights) >= 0.1:
+                                        new_clusters.append([j, j_prime])
+                                        classified_indices.add(j)
+                                        classified_indices.add(j_prime)
+                                        found_merge = True
+                                        break
+                            
+                            if not found_merge:
+                                # If no merge partner found, j stands alone (for now, will be added below if not in classified)
+                                pass
+
+                        # Add any remaining unclassified processes as their own clusters
+                        for k in range(self.n_proc):
+                            if k not in classified_indices:
+                                new_clusters.append([k])
+                        
+                        cluster_indices = new_clusters
+                        
+
     
+
+                    #implement merging according to clusters
                     lists_to_merge = [self.wdeno_list, self.searched_points_list, self.inv_covariances_list, self.gaussian_normterm_list, self.means_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list]
                     merged_lists, self.searched_log_densities_list = merge_arrays(lists_to_merge, cluster_indices, self.element_num_list, self.searched_log_densities_list, self.latest_prob_index, self.cov_update_count)
                     (self.wdeno_list, self.searched_points_list, self.inv_covariances_list, self.gaussian_normterm_list, self.means_list, self.call_num_list, self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list) = merged_lists
@@ -564,7 +717,15 @@ class Sampler:
                     self.element_num_list = merge_element_num_list(self.element_num_list, cluster_indices)
                     self.now_covariances = merge_max_list(self.now_covariances, cluster_indices)
                     self.now_normterms = merge_max_list(self.now_normterms, cluster_indices)
+                    n_proc_prev = self.n_proc
                     self.n_proc = len(self.searched_log_densities_list)
+                    
+                    if self.stop_on_merge and self.n_proc < n_proc_prev:
+                        print(f"Merge detected at iteration {i}. Stopping.")
+                        logger.info(f"Merge detected at iteration {i}. Stopping.")
+                        self.current_iter = i + 1 # update iter count
+                        break
+
                     last_gaussian_points_cache = [self.last_gaussian_points[cluster_indices[j][0]] for j in range(self.n_proc)]
                     self.last_gaussian_points = last_gaussian_points_cache
     
@@ -588,7 +749,10 @@ class Sampler:
                         probabilities_list[j] /= self.wdeno_list[j][ind1:ind2]
                     probabilities_list[j][probabilities_list[j] < 0] = 0
                     weights_sum = np.sum(probabilities_list[j])
-                    probabilities_list[j] /= weights_sum
+                    if weights_sum > 0:
+                        probabilities_list[j] /= weights_sum
+                    else:
+                        probabilities_list[j] = np.ones_like(probabilities_list[j]) / len(probabilities_list[j])
                     mean = np.average(points_list[j], weights=probabilities_list[j], axis=0)
                     self.now_means.append(mean)
                     
@@ -755,7 +919,10 @@ class Sampler:
                     logger.error(f"Flag actions failed: {e}")
 
                 # Update diagnostics
-                if i % self.print_iter == 0:
+                compute_logZ = (i % self.print_iter == 0) or (stop_dlogZ is not None and (i % self.alpha == 0))
+                logZ = None
+                dlogZ = None
+                if compute_logZ:
                     c_term = self.loglike_normalization
                     calls = sum(self.element_num_list)
                     ind1 = max(int(self.element_num_list[0] * (1 - self.EVIDENCE_ESTIMATION_FRACTION)), 0)
@@ -763,12 +930,30 @@ class Sampler:
                     wsum = sum(np.sum(np.exp(self.searched_log_densities_list[j][ind1:ind2] - c_term) / self.wdeno_list[j][ind1:ind2]) for j in range(self.n_proc)) * self.n_proc * (self.alpha * self.batch_point_num)
                     Nsum = sum(self.call_num_list[j][ind1:ind2].sum() for j in range(self.n_proc))
                     logZ = c_term - np.log(Nsum) + np.log(wsum)
-                    
+
+                    if stop_dlogZ is not None and (i % self.alpha == 0):
+                        if self._last_logZ_for_stop is not None and self._last_logZ_iter is not None and (i - self._last_logZ_iter) >= self.alpha:
+                            dlogZ = abs(logZ - self._last_logZ_for_stop)
+                            self._last_dlogZ = dlogZ
+                        self._last_logZ_for_stop = logZ
+                        self._last_logZ_iter = i
+
+                    display_dlogZ = self._last_dlogZ if self._last_dlogZ is not None else np.nan
+                    if dlogZ is not None:
+                        display_dlogZ = dlogZ
                     # Report stats for the top process (processes are periodically sorted by max log-likelihood)
-                    status = f"samples: {Nsum}, evals: {calls}, n_proc: {self.n_proc}, cov[0]: {self.now_covariances[0][0, 0]:.5e}, logZ: {logZ:.5f}, max_ld: {self.max_logden_list[0]:.5f}"
+                    status = f"samples: {Nsum}, evals: {calls}, n_proc: {self.n_proc}, cov[0]: {self.now_covariances[0][0, 0]:.5e}, logZ: {logZ:.5f}, dlogZ: {display_dlogZ:.5e}, max_ld: {self.max_logden_list[0]:.5f}"
                     pbar.set_description(status)
-                    pbar.update(self.print_iter)
-    
+                    if i % self.print_iter == 0:
+                        pbar.update(self.print_iter)
+
+                    if stop_dlogZ is not None and dlogZ is not None and dlogZ <= stop_dlogZ:
+                        self.current_iter = i + 1
+                        stop_message = f"Early stopping at iter {i}: dlogZ={dlogZ:.5e} <= stop_dlogZ={stop_dlogZ:.5e}, logZ={logZ:.5f}"
+                        logger.info(stop_message)
+                        print(stop_message)
+                        break
+
                 self.current_iter += 1
                 
                 # Clean up temporary variables to save memory

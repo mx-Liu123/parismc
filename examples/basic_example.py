@@ -11,6 +11,9 @@ This example demonstrates:
 import numpy as np
 from parismc import Sampler, SamplerConfig
 
+# Set global seed immediately
+np.random.seed(42)
+
 # Define target distribution parameters at module level
 TRUE_MEAN = np.array([0.3, 0.7])
 TRUE_COV = np.array([[0.01, 0.005], [0.005, 0.02]])
@@ -41,7 +44,7 @@ def log_density(x):
 def main():
     
     # Configure sampler with minimal settings
-    config = SamplerConfig()  # Use all default values
+    config = SamplerConfig(seed=42)  # Use fixed seed for reproducibility
     
     # Initialize sampler
     ndim = 2
@@ -53,7 +56,8 @@ def main():
         ndim=ndim,
         n_seed=n_seed,
         log_density_func=log_density,
-        init_cov_list=init_cov_list
+        init_cov_list=init_cov_list,
+        config=config
         # No prior_transform needed for this simple example
     )
     

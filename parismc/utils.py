@@ -39,3 +39,5 @@ def find_sigma_level(ndim, prob):
     def analytical_probability(k):
         return gammainc(ndim / 2, k**2 / 2) - prob
     return bisect(analytical_probability, 0, 10, xtol=1e-6)
+
+

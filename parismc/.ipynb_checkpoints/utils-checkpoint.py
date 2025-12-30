@@ -39,3 +39,64 @@ def find_sigma_level(ndim, prob):
     def analytical_probability(k):
         return gammainc(ndim / 2, k**2 / 2) - prob
     return bisect(analytical_probability, 0, 10, xtol=1e-6)
+
+
+def _compute_weight_segment(self, points, param_idx, start_idx, end_idx, cov_mode="single", cov_ref_idx=None):
+        """
+        Computes the weighting segment.
+        
+        Args:
+            points (np.ndarray): The points to evaluate (from population j).
+            param_idx (int): The index of the population providing parameters (j or j_prime).
+                             Used to access means_list, inv_covariances_list, etc.
+            start_idx (int): Start index for slicing parameter lists.
+            end_idx (int): End index for slicing parameter lists.
+            cov_mode (str): 'single' or 'multi'.
+            cov_ref_idx (int, optional): Index for covariance if mode is 'single'.
+
+        Returns:
+            np.ndarray: The calculated addon weights.
+        """
+        # --- Data Preparation ---
+        
+        # 1. Slice means and proposal coefficients from the parameter source (param_idx)
+        means_cache = self.means_list[param_idx][start_idx:end_idx]
+        proposalcoeff_cache = self.proposalcoeff_list[param_idx][start_idx:end_idx]
+
+        # 2. Prepare covariance matrices from the parameter source (param_idx)
+        if cov_mode == "multi":
+            # Case: Multiple covariance matrices
+            index_array = np.arange(start_idx, end_idx) // self.cov_update_count
+            inv_covariances_cache = self.inv_covariances_list[param_idx][index_array]
+            norm_terms_cache = self.gaussian_normterm_list[param_idx][index_array]
+            compute_func = weighting_seeds_manycov
+        else:
+            # Case: Single covariance matrix
+            inv_covariances_cache = self.inv_covariances_list[param_idx][cov_ref_idx]
+            norm_terms_cache = self.gaussian_normterm_list[param_idx][cov_ref_idx]
+            compute_func = weighting_seeds_manypoint
+
+        # --- Calculation (Multiprocessing vs Serial) ---
+        
+        if self.use_pool and self.pool is not None:
+            # Prepare arguments for starmap
+            points_list = [points] * self.n_pool
+            means_list = np.array_split(means_cache, self.n_pool)
+            proposalcoeff_list = np.array_split(proposalcoeff_cache, self.n_pool)
+
+            if cov_mode == "multi":
+                inv_cov_list = np.array_split(inv_covariances_cache, self.n_pool)
+                norm_list = np.array_split(norm_terms_cache, self.n_pool)
+            else:
+                inv_cov_list = [inv_covariances_cache] * self.n_pool
+                norm_list = [norm_terms_cache] * self.n_pool
+
+            results = self.pool.starmap(compute_func, zip(
+                points_list, means_list, inv_cov_list, norm_list, proposalcoeff_list
+            ))
+            return np.concatenate(results)
+        else:
+            return compute_func(
+                points, means_cache, inv_covariances_cache, 
+                norm_terms_cache, proposalcoeff_cache
+            )

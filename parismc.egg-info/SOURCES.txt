@@ -6,9 +6,9 @@ requirements.txt
 setup.py
 docs/conf.py
 examples/basic_example.py
+examples/basic_example_external_LHS.py
 examples/multimodal_example.py
 examples/resume_sampler_example.py
-examples/.ipynb_checkpoints/multimodal_example-checkpoint.py
 parismc/__init__.py
 parismc/clustering.py
 parismc/optimization.py

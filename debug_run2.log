@@ -1,0 +1,28 @@
+Initializing sampler...
+Preparing external LHS samples...
+Running sampling with external LHS...
+DEBUG: Iter 0 start
+DEBUG: LHS LogDensities[0]: [-0.00131429]
+DEBUG: LHS Points[0][0]: [0.30050001 0.69349998]
+DEBUG: After Weighting Update
+DEBUG: wdeno_list[0][0]: 1.170996630486383
+DEBUG: After Generation
+DEBUG: Generated Point[0]: [0.41156867 0.66258314]
+DEBUG: Generated LogDen[0]: -0.8705629845807716
+Extracting results...
+
+Results Summary:
+Total samples: 100
+Effective sample size: 5881.7
+
+True mean: [0.3 0.7]
+Estimated mean: [0.29576503 0.66679769]
+Mean error: 0.033471
+
+True covariance diagonal: [0.01 0.02]
+Estimated covariance diagonal: [0.0100766  0.01443889]
+
+Plot saved to: basic_results/sampling_results.png
+
+Basic example completed successfully!
+For more complex examples, see multimodal_example.py
