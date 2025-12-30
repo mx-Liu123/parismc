@@ -9,6 +9,7 @@ clustering for efficient multi-modal Bayesian inference.
 Key Hyperparameters
 -------------------
 
+- seed: Set a random seed (int) for fully deterministic results. Default is None (stochastic).
 - merge_confidence (p): Controls the merge radius between seeds via a Mahalanobis threshold. p=0.9 is generally fine for most problems.
 - alpha: Number of most recent samples used for importance weighting. Using alpha=10000 is a safe, conservative choice (older docs referred to this as latest_prob_index).
 

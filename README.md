@@ -98,8 +98,9 @@ PARIS demonstrates exceptional efficiency in high-dimensional, multi-modal scena
 * **Parallel Mode Discovery** – Multiple seeds explore independently, merging only when they converge to the same mode.
 * **Intuitive Hyperparameters** – Settings like number of seeds, initial covariance, and merge thresholds map directly to prior knowledge.
 * **Efficiency at Scale** – Handles high-dimensional, multi-modal targets with substantially fewer likelihood calls.
-* **Boundary-safe** – Automatically respects \[0,1]^d priors.
+* **Boundary-safe** – Automatically respects [0,1]^d priors.
 * **Multiprocessing Ready** – Runs smoothly across CPU cores for large inference tasks.
+* **Reproducibility** – Fully deterministic execution when a ``seed`` is provided, ensuring consistent results across runs.
 
 ## Installation
 
@@ -256,6 +257,7 @@ sampler = Sampler(
 
 ```python
 config = SamplerConfig(
+    seed=42,                    # Set seed for reproducible results (default: None)
     merge_confidence=0.9,       # Coverage prob mapped to Mahalanobis merge radius R_m (0→R_m=0, 1→R_m→∞)
     alpha=1000,                 # Number of most recent samples used for weighting
     trail_size=1000,            # Maximum trial samples per iteration
@@ -264,7 +266,8 @@ config = SamplerConfig(
     integral_num=100000,        # Monte Carlo samples for beta estimation
     gamma=100,                  # Covariance update frequency
     use_pool=True,              # Enable multiprocessing
-    n_pool=4                    # Number of processes
+    n_pool=4,                   # Number of processes
+    debug=False                 # Enable debug logging
 )
 
 ```
