@@ -4,3 +4,18 @@ examples/**
 !examples/**/
 !examples/**/*.py
 merge_exp/
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+
+# Python packaging information (egg-info)
+*.egg-info/
+
+# Output and results directory
+basic_results/
+
+# Specific runtime or config files
+sampler_flags.json
+user_prompt.txt
+
+# Scripts that shouldn't be tracked (optional)
+verify_baseline.sh
