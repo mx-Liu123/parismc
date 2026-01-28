@@ -264,13 +264,13 @@ config = SamplerConfig(
     boundary_limiting=True,     # Enable boundary constraint handling
     use_beta=True,              # Use beta correction for boundaries
     integral_num=100000,        # Monte Carlo samples for beta estimation
-    gamma=100,                  # Covariance update frequency
-    use_pool=True,              # Enable multiprocessing
-    n_pool=4,                   # Number of processes
-    debug=False                 # Enable debug logging
-)
-
-```
+        gamma=100,                  # Covariance update frequency
+        use_pool=True,              # Enable multiprocessing
+        n_pool=4,                   # Number of processes
+        merge_type='single',        # Merging strategy: 'distance', 'single' (default), or 'multiple'
+        debug=False                 # Enable debug logging
+    )
+    ```
 
 ### Key Hyperparameters
 
