@@ -558,6 +558,119 @@ class Sampler:
                 )
                 self.wdeno_list[j][ind1:ind2_oldproposals] -= addon_weights
 
+    def _sort_processes_state(self) -> None:
+        """
+        Sort all process-related state lists by max log density in descending order.
+        This uses reflection to ensure all relevant attributes are kept in sync.
+        Uses Python's stable sort to maintain consistent order when values are equal.
+        """
+        if self.n_proc <= 1:
+            return
+
+        # 1. Determine sort indices using Python's stable sort
+        # Higher max_logden first. 
+        sort_indices = sorted(
+            range(len(self.max_logden_list)), 
+            key=lambda k: self.max_logden_list[k], 
+            reverse=True
+        )
+        
+        # 2. Identify all attributes that need to be sorted
+        state_attributes = [
+            'max_logden_list', 'last_gaussian_points', 'searched_points_list',
+            'searched_log_densities_list', 'means_list', 'inv_covariances_list',
+            'gaussian_normterm_list', 'call_num_list', 'rej_num_list',
+            'wcoeff_list', 'wdeno_list', 'element_num_list',
+            'now_covariances', 'now_normterms', 'proposalcoeff_list'
+        ]
+        
+        # 3. Apply sorting to each attribute
+        for attr_name in state_attributes:
+            if hasattr(self, attr_name):
+                current_val = getattr(self, attr_name)
+                # Handle both list and tuple
+                sorted_val = [current_val[idx] for idx in sort_indices]
+                setattr(self, attr_name, sorted_val)
+
+    def _find_clusters_by_distance(self) -> List[List[int]]:
+        """Find clusters based on Mahalanobis distance between process means."""
+        self.last_gaussian_points = list(np.array(self.last_gaussian_points))
+        cluster_indices = get_cluster_indices_cov(
+            np.array(self.last_gaussian_points), 
+            self.now_covariances, 
+            dist=self.merge_dist
+        )
+        return [sorted(sublist) for sublist in cluster_indices]
+
+    def _find_clusters_by_weight(self) -> List[List[int]]:
+        """Find clusters by cross-evaluating samples against other processes' proposals."""
+        classified_indices = set()
+        new_clusters = []
+        
+        # Greedy Pairwise Merging (Matching original loop structure)
+        for j in range(self.n_proc):
+            if j in classified_indices:
+                continue
+                
+            found_merge = False
+            for j_prime in range(self.n_proc):
+                if j == j_prime or j_prime in classified_indices:
+                    continue 
+
+                # Prepare data for cross-check
+                ind1 = max(-self.latest_prob_index + self.element_num_list[j_prime], 0)
+                ind2 = self.element_num_list[j_prime]
+                
+                # Determine target points for evaluation (Must exactly match original logic)
+                if self.merge_type == 'single':
+                    target_end = self.element_num_list[j]
+                    target_start = max(0, target_end - self.batch_point_num)
+                elif self.merge_type == 'multiple':
+                    target_end = self.element_num_list[j]
+                    target_start = 0
+                else: # Fallback to single behavior if somehow unspecified
+                    target_end = self.element_num_list[j]
+                    target_start = max(0, target_end - self.batch_point_num)
+
+                points_to_eval = self.searched_points_list[j][target_start:target_end]
+                addon_weights = self._compute_weight_segment(
+                    points=points_to_eval,
+                    param_idx=j_prime, 
+                    start_idx=ind1, 
+                    end_idx=ind2, 
+                    cov_mode="multi" 
+                )
+                
+                current_weights = self.wdeno_list[j][target_start:target_end]
+                
+                # Merge Condition
+                if self.merge_type == 'single':
+                    if np.mean(addon_weights) >= np.mean(current_weights):
+                        new_clusters.append([j, j_prime])
+                        classified_indices.add(j)
+                        classified_indices.add(j_prime)
+                        found_merge = True
+                        break 
+                elif self.merge_type == 'multiple':
+                    # better_count = np.sum(addon_weights > current_weights/1)
+                    better_count = np.sum(addon_weights > current_weights)
+                    if len(addon_weights) > 0 and better_count > 0:
+                        new_clusters.append([j, j_prime])
+                        classified_indices.add(j)
+                        classified_indices.add(j_prime)
+                        found_merge = True
+                        break
+            
+            # This logic was outside j_prime loop in original
+            # but effectively handled at the end
+            
+        # Add any remaining unclassified processes as their own clusters
+        for k in range(self.n_proc):
+            if k not in classified_indices:
+                new_clusters.append([k])
+        
+        return new_clusters
+
     def _merge_processes(self, i: int) -> bool:
         """
         Sort processes and merge clusters.
@@ -568,109 +681,27 @@ class Sampler:
         if i <= 0:
             return False
 
-        # 1. Sort processes by max log density
-        combined = sorted(zip(
-            self.max_logden_list, self.last_gaussian_points, self.searched_points_list, 
-            self.searched_log_densities_list, self.means_list, self.inv_covariances_list, 
-            self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, 
-            self.wcoeff_list, self.wdeno_list, self.element_num_list, 
-            self.now_covariances, self.now_normterms, self.proposalcoeff_list
-        ), reverse=True, key=lambda x: x[0])
-        
-        (self.max_logden_list, self.last_gaussian_points, self.searched_points_list, 
-         self.searched_log_densities_list, self.means_list, self.inv_covariances_list, 
-         self.gaussian_normterm_list, self.call_num_list, self.rej_num_list, 
-         self.wcoeff_list, self.wdeno_list, self.element_num_list, 
-         self.now_covariances, self.now_normterms, self.proposalcoeff_list) = zip(*combined)
+        # 1. Sort processes by max log density (Robust implementation)
+        self._sort_processes_state()
 
-        # 2. Determine Cluster Indices (Strategy Selection)
-        cluster_indices = []
-
+        # 2. Determine Cluster Indices based on strategy
         if self.merge_type == 'distance':
-            # --- Strategy A: Distance-based Merging ---
-            self.last_gaussian_points = list(np.array(self.last_gaussian_points))
-            cluster_indices = get_cluster_indices_cov(np.array(self.last_gaussian_points), self.now_covariances, dist=self.merge_dist)
-            cluster_indices = [sorted(sublist) for sublist in cluster_indices]
+            cluster_indices = self._find_clusters_by_distance()
         else:
-            # --- Strategy B/C: Weight-based Merging (Cross-proc check) ---
-            classified_indices = set()
-            new_clusters = []
-            
-            # Greedy Pairwise Merging
-            for j in range(self.n_proc):
-                if j in classified_indices:
-                    continue # Already handled
-                    
-                found_merge = False
-                for j_prime in range(self.n_proc):
-                    if j == j_prime or j_prime in classified_indices:
-                        continue 
+            cluster_indices = self._find_clusters_by_weight()
 
-                    # Prepare data for cross-check
-                    ind1 = max(-self.latest_prob_index + self.element_num_list[j_prime], 0)
-                    ind2 = self.element_num_list[j_prime]
-                    
-                    # Evaluate j's latest points using j_prime's parameters
-                    if self.merge_type == 'single':
-                        target_end = self.element_num_list[j]
-                        target_start = max(0, target_end - self.batch_point_num)
-                    elif self.merge_type == 'multiple':
-                        target_end = self.element_num_list[j]
-                        target_start = 0
-                    else:
-                        target_end = self.element_num_list[j]
-                        target_start = max(0, target_end - self.batch_point_num)
-
-                    points_to_eval = self.searched_points_list[j][target_start:target_end]
-
-                    addon_weights = self._compute_weight_segment(
-                        points=points_to_eval,
-                        param_idx=j_prime, 
-                        start_idx=ind1, 
-                        end_idx=ind2, 
-                        cov_mode="multi" 
-                    )
-                    
-                    # Compare j_prime's contribution vs j's own contribution
-                    current_weights = self.wdeno_list[j][target_start:target_end]
-                    
-                    # Merge Condition
-                    if self.merge_type == 'single':
-                        # Strategy B: Average Weight Comparison
-                        if np.mean(addon_weights) >= np.mean(current_weights):
-                            new_clusters.append([j, j_prime])
-                            classified_indices.add(j)
-                            classified_indices.add(j_prime)
-                            found_merge = True
-                            break 
-                    elif self.merge_type == 'multiple':
-                        # Strategy C: Pointwise Density Comparison
-                        better_count = np.sum(addon_weights > current_weights/1)
-                        if len(addon_weights) > 0 and better_count > 0:
-                            new_clusters.append([j, j_prime])
-                            classified_indices.add(j)
-                            classified_indices.add(j_prime)
-                            found_merge = True
-                            break
-                
-                if not found_merge:
-                    pass
-
-            # Add any remaining unclassified processes as their own clusters
-            for k in range(self.n_proc):
-                if k not in classified_indices:
-                    new_clusters.append([k])
-            
-            cluster_indices = new_clusters
-
-        # 3. Implement merging
-        lists_to_merge = [self.wdeno_list, self.searched_points_list, self.inv_covariances_list, 
-                          self.gaussian_normterm_list, self.means_list, self.call_num_list, 
-                          self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list]
+        # 3. Implement merging logic
+        lists_to_merge = [
+            self.wdeno_list, self.searched_points_list, self.inv_covariances_list, 
+            self.gaussian_normterm_list, self.means_list, self.call_num_list, 
+            self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list
+        ]
+        
         merged_lists, self.searched_log_densities_list = merge_arrays(
             lists_to_merge, cluster_indices, self.element_num_list, 
             self.searched_log_densities_list, self.latest_prob_index, self.cov_update_count
         )
+        
         (self.wdeno_list, self.searched_points_list, self.inv_covariances_list, 
          self.gaussian_normterm_list, self.means_list, self.call_num_list, 
          self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list) = merged_lists
@@ -689,8 +720,7 @@ class Sampler:
             self.current_iter = i + 1 
             return True
 
-        last_gaussian_points_cache = [self.last_gaussian_points[cluster_indices[j][0]] for j in range(self.n_proc)]
-        self.last_gaussian_points = last_gaussian_points_cache
+        self.last_gaussian_points = [self.last_gaussian_points[cluster_indices[j][0]] for j in range(self.n_proc)]
         
         return False
 
@@ -782,9 +812,109 @@ class Sampler:
 
         return points_list, probabilities_list
 
+    def _calculate_guess_size(self, j: int, ind1: int) -> int:
+        """Calculate the number of guesses based on acceptance history."""
+        start_idx = ind1 - self.LOOKBACK_WINDOW
+        recent_calls = self.call_num_list[j][start_idx:ind1].sum()
+        
+        # Avoid division by zero if lookback window is effectively empty (though indices are handled safely by slice)
+        # Logic matches original: mean calls per point / divisor
+        avg_calls = recent_calls / self.LOOKBACK_WINDOW
+        
+        guess_size = max(avg_calls / self.GUESS_SIZE_DIVISOR, self.MIN_GUESS_SIZE)
+        return int(min(self.trail_size, guess_size))
+
+    def _sample_with_boundary(self, j: int, n_guess: int, points_all: np.ndarray, 
+                            probabilities_all: np.ndarray, mvn: multivariate_normal) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+        """
+        Perform rejection sampling to satisfy boundary constraints ([0, 1]^d).
+        
+        Returns:
+            Tuple: (selected_points, selected_log_densities, selected_means, calls_made)
+        """
+        # Initialize loop variables
+        bulky_ind1 = 0
+        while_call_count = 0
+        total_calls_added = 0
+        
+        # Pre-generate bulky samples to avoid calling rvs inside the loop too often
+        zeromean_samples = mvn.rvs(size=self.trail_size)
+        bulky_mean_inds = np.random.choice(len(probabilities_all), self.trail_size, p=probabilities_all, replace=True)
+        
+        # Buffers for the final selected point
+        # Although we might search many points, we only need ONE success for this batch_point_num=1 logic
+        # (Note: Current code implies batch_point_num=1 for boundary logic logic flow)
+        
+        while True:
+            # Refresh bulk samples if we ran out
+            if bulky_ind1 + n_guess > self.trail_size:
+                bulky_ind1 = 0
+                zeromean_samples = mvn.rvs(size=self.trail_size)
+                bulky_mean_inds = np.random.choice(len(probabilities_all), self.trail_size, p=probabilities_all, replace=True)
+
+            bulky_ind2 = bulky_ind1 + n_guess
+            
+            # 1. Propose candidates
+            indices_here = bulky_mean_inds[bulky_ind1:bulky_ind2]
+            gaussian_means = points_all[indices_here]
+            gaussian_points = zeromean_samples[bulky_ind1:bulky_ind2] + gaussian_means
+            
+            # 2. Check Boundaries
+            out_of_bound_indices = np.any((gaussian_points < 0) | (gaussian_points > 1), axis=1)
+            is_within_bounds = ~out_of_bound_indices
+            valid_count = is_within_bounds.sum()
+            
+            # 3. Evaluate Densities (only for valid points)
+            gaussian_log_densities = np.full(n_guess, -np.inf)
+            if valid_count > 0:
+                if self.use_pool and self.pool is not None:
+                    # Filter points for parallel execution
+                    valid_points_list = [gaussian_points[k] for k in range(n_guess) if is_within_bounds[k]]
+                    results = self.pool.map(self.log_density_func, valid_points_list)
+                    gaussian_log_densities[is_within_bounds] = np.array(results).flatten()
+                else:
+                    gaussian_log_densities[is_within_bounds] = self.log_density_func(gaussian_points[is_within_bounds])
+            
+            # 4. Compute Weights & Acceptance
+            # We need single_weight_deno only for valid points
+            single_weight_deno = np.ones(n_guess)
+            if valid_count > 0:
+                # Need covariance/normterm for the CURRENT iteration's weighting
+                # In original code: int((i + 1) * self.batch_point_num / self.cov_update_count)
+                # We need 'i' passed in or accessible. 
+                # To avoid passing 'i' deep, we can pass the specific cov/norm needed.
+                # For now, let's assume we access self state or passed params.
+                # Actually, in original code, it accessed self.inv_covariances_list[j][...]
+                # We'll use the current covariance snapshot which corresponds to the *next* update slot
+                # But wait, original code used `i` which is passed to _generate_new_points.
+                # We need to compute the correct index.
+                # Let's compute it outside and pass it in, OR just recompute it here if we pass 'i'.
+                # To keep signature clean, let's use the 'current' attributes which should be up to date?
+                # No, inv_covariances_list is a history. 
+                pass
+
+            # Update loop counters
+            bulky_ind1 = bulky_ind2
+            while_call_count += n_guess
+            
+            # ... (Logic gets complex here to extract cleanly without changing behavior)
+            # To ensure EXACT behavior match, I will inline the specific weighting check logic 
+            # or pass necessary context.
+            return None # Placeholder to stop and rethink strategy for safety
+
+    # RETRYING STRATEGY: 
+    # The dependencies on `i` and `self.inv_covariances_list` inside the loop make extraction tricky 
+    # without passing many arguments. 
+    # Instead, I will keep `_sample_with_boundary` inside `Sampler` and pass `i` to it.
+
     def _generate_new_points(self, i: int, points_list: List[np.ndarray], probabilities_list: List[np.ndarray]) -> None:
         """Generate new candidate points."""
         self.last_gaussian_points = []
+        
+        # Pre-calculate index for covariance lookup to avoid repetition
+        # Matches original: int((i + 1) * self.batch_point_num / self.cov_update_count)
+        cov_idx = int((i + 1) * self.batch_point_num / self.cov_update_count)
+
         for j in range(self.n_proc):
             points_all = points_list[j]
             probabilities_all = probabilities_list[j]
@@ -792,117 +922,164 @@ class Sampler:
             covariance = self.now_covariances[j]
             ind1 = self.element_num_list[j]
             ind2 = self.element_num_list[j] + self.batch_point_num
-            n_guess = int(min(
-                self.trail_size, 
-                max(
-                    self.call_num_list[j][ind1 - self.LOOKBACK_WINDOW:ind1].sum() / self.LOOKBACK_WINDOW / self.GUESS_SIZE_DIVISOR, 
-                    self.MIN_GUESS_SIZE
-                )
-            ))
+            
+            n_guess = self._calculate_guess_size(j, ind1)
+            
             mvn = multivariate_normal(mean=np.zeros(self.ndim), cov=covariance, allow_singular=True)
             self.last_gaussian_points.append(mean.copy())
-            gaussian_log_densities = -np.inf * np.ones((n_guess,))
-            single_weight_deno = np.ones((n_guess))
+            
+            # Initialize result containers
+            final_points = None
+            final_log_densities = None
+            final_means = None
+            calls_added = 0
+            eff_calls_added = 0
 
             if self.boundary_limiting:
-                out_of_bound_indices = np.full(n_guess, True)
-                zeromean_samples = mvn.rvs(size=self.trail_size)
-                bulky_mean_inds = np.random.choice(len(probabilities_all), self.trail_size, p=probabilities_all, replace=True)
+                # --- Boundary-Aware Sampling Logic ---
                 bulky_ind1 = 0
                 while_call_count = 0
+                
+                # Pre-allocate bulk samples
+                zeromean_samples = mvn.rvs(size=self.trail_size)
+                bulky_mean_inds = np.random.choice(len(probabilities_all), self.trail_size, p=probabilities_all, replace=True)
+                
                 while True:
+                    # Refresh bulk if needed
                     if bulky_ind1 + n_guess > self.trail_size:
                         bulky_ind1 = 0
                         zeromean_samples = mvn.rvs(size=self.trail_size)
                         bulky_mean_inds = np.random.choice(len(probabilities_all), self.trail_size, p=probabilities_all, replace=True)
+                    
                     bulky_ind2 = bulky_ind1 + n_guess
                     indices_here = bulky_mean_inds[bulky_ind1:bulky_ind2]
                     gaussian_means = points_all[indices_here]
                     gaussian_points = zeromean_samples[bulky_ind1:bulky_ind2] + gaussian_means
-                    gaussian_log_densities[:] = -np.inf
-                    single_weight_deno[:] = 1
+                    
+                    # Reset buffers
+                    gaussian_log_densities = np.full(n_guess, -np.inf)
+                    single_weight_deno = np.ones(n_guess)
+                    
+                    # Check Bounds
                     out_of_bound_indices = np.any((gaussian_points < 0) | (gaussian_points > 1), axis=1)
                     is_within_bounds = ~out_of_bound_indices
+                    valid_count = is_within_bounds.sum()
                     
-                    if self.use_pool and self.pool is not None and is_within_bounds.sum() > 0:
-                        gaussian_points_list = [gaussian_points[k, :] for k in range(gaussian_points.shape[0]) if is_within_bounds[k]]
-                        results = self.pool.map(self.log_density_func, gaussian_points_list)
-                        gaussian_log_densities[is_within_bounds] = np.array(results).flatten()
-                    elif is_within_bounds.sum() > 0:
-                        gaussian_log_densities[is_within_bounds] = self.log_density_func(gaussian_points[is_within_bounds])
+                    # Evaluate Valid Points
+                    if valid_count > 0:
+                        if self.use_pool and self.pool is not None:
+                            valid_points_list = [gaussian_points[k] for k in range(n_guess) if is_within_bounds[k]]
+                            results = self.pool.map(self.log_density_func, valid_points_list)
+                            gaussian_log_densities[is_within_bounds] = np.array(results).flatten()
+                        else:
+                            gaussian_log_densities[is_within_bounds] = self.log_density_func(gaussian_points[is_within_bounds])
                         
-                    single_weight_deno[is_within_bounds] = weighting_seeds_onepoint_with_onemean(gaussian_points[is_within_bounds], gaussian_means[is_within_bounds], self.inv_covariances_list[j][int((i + 1) * self.batch_point_num / self.cov_update_count)], self.gaussian_normterm_list[j][int((i + 1) * self.batch_point_num / self.cov_update_count)])
-                    if_weights_big = np.exp(gaussian_log_densities - self.loglike_normalization) / single_weight_deno > np.sum(probabilities_all) / self.exclude_scale_z
-                    if_weights_big = np.full(if_weights_big.shape, True, dtype=bool)
+                        # Calculate Weights for Rejection
+                        single_weight_deno[is_within_bounds] = weighting_seeds_onepoint_with_onemean(
+                            gaussian_points[is_within_bounds], 
+                            gaussian_means[is_within_bounds], 
+                            self.inv_covariances_list[j][cov_idx], 
+                            self.gaussian_normterm_list[j][cov_idx]
+                        )
+
+                    # Rejection Criteria
+                    # Note: exclude_scale_z defaults to inf, so threshold is usually 0
+                    threshold = np.sum(probabilities_all) / self.exclude_scale_z
+                    if_weights_big = (np.exp(gaussian_log_densities - self.loglike_normalization) / single_weight_deno) > threshold
+                    
+                    # Force array type just in case
+                    if_weights_big = np.array(if_weights_big, dtype=bool) 
+                    # Original code had: if_weights_big = np.full(if_weights_big.shape, True, dtype=bool) 
+                    # WAIT! The original code OVERWROTE the logic check with True!
+                    # "if_weights_big = np.full(if_weights_big.shape, True, dtype=bool)"
+                    # This means it ALWAYS accepts the first valid point found? 
+                    # Let me double check the read file content.
+                    
+                    # YES. In the original code read earlier:
+                    # if_weights_big = np.exp(...) > ...
+                    # if_weights_big = np.full(if_weights_big.shape, True, dtype=bool)
+                    # This effectively disables the importance weight rejection check, making it simple rejection sampling
+                    # based on "found a valid point?" (if density > -inf).
+                    # I must preserve this behavior (even if it looks odd/debug-like).
+                    if_weights_big[:] = True 
+
                     bulky_ind1 = bulky_ind2
                     while_call_count += n_guess
-                    if not if_weights_big.any():
-                        self.call_num_list[j][ind1:ind2] += n_guess
-                        self.eff_calls += is_within_bounds.sum()
-                    elif if_weights_big[0]:
-                        valid_index = 0
-                        self.call_num_list[j][ind1:ind2] += 1
-                        self.eff_calls += 1
-                        gaussian_log_densities = gaussian_log_densities[valid_index:valid_index + 1]
-                        gaussian_points = gaussian_points[valid_index:valid_index + 1]
-                        gaussian_means = gaussian_means[valid_index:valid_index + 1]
-                        break
+                    
+                    has_valid = if_weights_big.any() # Effectively "is there any point?"
+                    
+                    # Decision Logic
+                    if not has_valid:
+                        # Case 1: No valid points found in this batch
+                        calls_added += n_guess
+                        eff_calls_added += valid_count
+                        # Loop continues...
                     else:
-                        valid_index = np.argmax(if_weights_big)
-                        self.call_num_list[j][ind1:ind2] += valid_index + 1
-                        true_indices = np.flatnonzero(is_within_bounds)
-                        pos = np.where(true_indices == valid_index)[0][0] + 1
-                        self.eff_calls += pos
-                        gaussian_log_densities = gaussian_log_densities[valid_index:valid_index + 1]
-                        gaussian_points = gaussian_points[valid_index:valid_index + 1]
-                        gaussian_means = gaussian_means[valid_index:valid_index + 1]
+                        # Case 2: Found at least one valid point
+                        # Original: if if_weights_big[0]: ... else: ...
+                        # Since all are True, it just picks the first one?
+                        # Wait, logic is: 
+                        # if if_weights_big[0]: valid_index=0 ... break
+                        # else: valid_index=argmax... break
+                        # Since we set all True, it will always take index 0.
+                        
+                        valid_index = 0
+                        calls_added += (valid_index + 1) # = 1
+                        eff_calls_added += 1 # logic for eff_calls was simplified in original for index 0
+                        
+                        # Extract the winner
+                        final_log_densities = gaussian_log_densities[valid_index:valid_index + 1]
+                        final_points = gaussian_points[valid_index:valid_index + 1]
+                        final_means = gaussian_means[valid_index:valid_index + 1]
                         break
+                    
+                    # Timeout / Give up Check
                     if while_call_count > int(self.trail_size) or not self.keep_trial_seeds[j]:
                         self.keep_trial_seeds[j] = False
+                        # Force accept the first one (even if invalid? No, indices match)
                         valid_index = 0
-                        self.call_num_list[j][ind1:ind2] += n_guess
-                        self.eff_calls += is_within_bounds.sum()
-                        gaussian_log_densities = gaussian_log_densities[valid_index:valid_index + 1]
-                        gaussian_points = gaussian_points[valid_index:valid_index + 1]
-                        gaussian_means = gaussian_means[valid_index:valid_index + 1]
+                        calls_added += n_guess
+                        eff_calls_added += valid_count
+                        
+                        final_log_densities = gaussian_log_densities[valid_index:valid_index + 1]
+                        final_points = gaussian_points[valid_index:valid_index + 1]
+                        final_means = gaussian_means[valid_index:valid_index + 1]
                         break
-
+                        
             else:
-                # No boundary limiting: draw directly without truncation
-                # Select mean indices according to current weights
+                # --- Unbounded Sampling Logic ---
                 indices_here = np.random.choice(len(probabilities_all), self.batch_point_num, p=probabilities_all, replace=True)
                 gaussian_means = points_all[indices_here]
-                # Draw zero-mean samples and shift by selected means
                 zeromean_samples = mvn.rvs(size=self.batch_point_num)
-                # Ensure correct shape when batch_point_num == 1
                 if self.batch_point_num == 1:
                     zeromean_samples = zeromean_samples.reshape(1, -1)
                 gaussian_points = zeromean_samples + gaussian_means
-                # Evaluate log density
+                
                 if self.use_pool and self.pool is not None:
                     gaussian_points_list = [gaussian_points[k, :] for k in range(gaussian_points.shape[0])]
                     results = self.pool.map(self.log_density_func, gaussian_points_list)
                     gaussian_log_densities = np.array(results).flatten()
                 else:
                     gaussian_log_densities = self.log_density_func(gaussian_points)
-                # Single-point denominator with current covariance snapshot
-                single_weight_deno = weighting_seeds_onepoint_with_onemean(
-                    gaussian_points,
-                    gaussian_means,
-                    self.inv_covariances_list[j][int((i + 1) * self.batch_point_num / self.cov_update_count)],
-                    self.gaussian_normterm_list[j][int((i + 1) * self.batch_point_num / self.cov_update_count)]
-                )
-                # Accounting for calls (no rejection cycle here)
-                self.call_num_list[j][ind1:ind2] += self.batch_point_num
-                self.eff_calls += self.batch_point_num
 
-            proposalcoeffs = np.ones((len(gaussian_means)))
-            self.searched_log_densities_list[j][ind1:ind2] = gaussian_log_densities.copy()
-            self.searched_points_list[j][ind1:ind2] = gaussian_points.copy()
-            self.means_list[j][ind1:ind2] = gaussian_means.copy()
-            self.proposalcoeff_list[j][ind1:ind2] = proposalcoeffs.copy()
+                calls_added = self.batch_point_num
+                eff_calls_added = self.batch_point_num
+                
+                final_log_densities = gaussian_log_densities
+                final_points = gaussian_points
+                final_means = gaussian_means
+
+            # Update State
+            self.call_num_list[j][ind1:ind2] += calls_added
+            self.eff_calls += eff_calls_added
+            
+            self.searched_log_densities_list[j][ind1:ind2] = final_log_densities.copy()
+            self.searched_points_list[j][ind1:ind2] = final_points.copy()
+            self.means_list[j][ind1:ind2] = final_means.copy()
+            self.proposalcoeff_list[j][ind1:ind2] = 1.0
+            
             self.element_num_list[j] += self.batch_point_num
-            self.max_logden_list[j] = max(self.max_logden_list[j], gaussian_log_densities.max())
+            self.max_logden_list[j] = max(self.max_logden_list[j], final_log_densities.max())
 
     def _report_progress(self, i: int, stop_dlogZ: Optional[float], pbar: tqdm) -> bool:
         """Calculate stats, report progress, and check stopping conditions."""
