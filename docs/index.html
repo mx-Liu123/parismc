@@ -137,19 +137,19 @@
         <h2>Key Features</h2>
         <div class="features">
             <div class="feature-card">
-                <h3>🎯 Adaptive Proposals per Seed</h3>
+                <h3>Adaptive Proposals per Seed</h3>
                 <p>Each process maintains its own proposal, evolving a local Gaussian mixture that adapts to past samples.</p>
             </div>
             <div class="feature-card">
-                <h3>⚖️ Auto-balanced Exploration</h3>
+                <h3>Auto-balanced Exploration</h3>
                 <p>High-weight discoveries automatically attract more samples, while overweights self-correct over time.</p>
             </div>
             <div class="feature-card">
-                <h3>📊 Accurate Evidence Estimation</h3>
+                <h3>Accurate Evidence Estimation</h3>
                 <p>Bayesian evidence is computed directly from importance weights, no extra machinery needed.</p>
             </div>
             <div class="feature-card">
-                <h3>🚀 Parallel Mode Discovery</h3>
+                <h3>Parallel Mode Discovery</h3>
                 <p>Multiple seeds explore independently, merging only when they converge to the same mode.</p>
             </div>
         </div>
@@ -249,13 +249,13 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)</div>
         </div>
 
         <div class="feature-card">
-            <h3>🏆 Key Results</h3>
+            <h3>Key Results</h3>
             <ul>
-                <li><strong>🚀 57× fewer likelihood evaluations</strong> than Dynesty (Dynamic Nested Sampling)</li>
-                <li><strong>⚡ 5.5× fewer likelihood evaluations</strong> than PTMCMC</li>
-                <li><strong>🎯 Accurate evidence estimation</strong> (2.30 vs theoretical 2.30)</li>
-                <li><strong>⚖️ Consistent mode recovery</strong> across all dimensions</li>
-                <li><strong>📊 Robust performance</strong> with N<sub>LHS</sub>=10⁴, N<sub>seed</sub>=100</li>
+                <li><strong>57× fewer likelihood evaluations</strong> than Dynesty (Dynamic Nested Sampling)</li>
+                <li><strong>5.5× fewer likelihood evaluations</strong> than PTMCMC</li>
+                <li><strong>Accurate evidence estimation</strong> (2.30 vs theoretical 2.30)</li>
+                <li><strong>Consistent mode recovery</strong> across all dimensions</li>
+                <li><strong>Robust performance</strong> with N<sub>LHS</sub>=10⁴, N<sub>seed</sub>=100</li>
             </ul>
             <p><em>Figure: 1D marginalized posterior comparison. PARIS (green) closely matches the analytical target distribution (grey), while competitors show mode recovery bias. The target distribution's uniform-like appearance in 1D projections results from LHS-based placement of GMM component centers ensuring maximal separation. PARIS achieves this accuracy with dramatically fewer likelihood evaluations.</em></p>
         </div>

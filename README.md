@@ -40,11 +40,11 @@ PARIS demonstrates exceptional efficiency in high-dimensional, multi-modal scena
 | PTMCMC | 145,400 | 822,352 | 1.91 |
 
 **Key Results:**
-- **🚀 57× fewer likelihood evaluations** than Dynesty (Dynamic Nested Sampling)
-- **⚡ 5.5× fewer likelihood evaluations** than PTMCMC  
-- **🎯 Accurate evidence estimation** (2.30 vs theoretical 2.30)
-- **⚖️ Consistent mode recovery** across all dimensions
-- **📊 Robust performance** with N_LHS=10⁴, N_seed=100
+*   **57× fewer likelihood evaluations** than Dynesty (Dynamic Nested Sampling)
+*   **5.5× fewer likelihood evaluations** than PTMCMC
+*   **Accurate evidence estimation** (2.30 vs theoretical 2.30)
+*   **Consistent mode recovery** across all dimensions
+*   **Robust performance** with N_LHS=10⁴, N_seed=100
 
 <div align="center">
 <img src="docs/images/GMM10D10M.png" alt="10D GMM Performance Comparison" width="600"/>
