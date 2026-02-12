@@ -50,8 +50,9 @@ def log_density(final_states_raw):
     array-like, shape (n_samples,) or scalar
         Log-density values
     """
-    # Transform coordinates: [0,1] -> [-0.2, 1.2]
-    final_states_in = (final_states_raw * 1.4) - 0.2
+    # Input is already transformed by prior_transform
+    # Ensure 2D for vectorization
+    final_states_in = np.atleast_2d(final_states_raw)
     
     # Equal weights for all modes (already defined at module level)    
     
@@ -78,10 +79,10 @@ def log_density(final_states_raw):
 
 def prior_transform(u):
     """
-    Transform from unit cube [0,1]^ndim to parameter space.
+    Transform from unit cube [0,1]^ndim to parameter space [-0.2, 1.2]^ndim.
     
-    In this case, we keep the same domain [0,1]^ndim since
-    the coordinate transformation is handled inside log_density.
+    This demonstrates how to map the unit cube to a physical parameter space.
+    The sampler works in [0,1], calls this transform, and passes the result to log_density.
     
     Parameters:
     ----------
@@ -91,9 +92,10 @@ def prior_transform(u):
     Returns:
     -------
     array-like, same shape as input
-        Transformed points (in this case, unchanged)
+        Transformed points in physical space
     """
-    return u
+    # Transform coordinates: [0,1] -> [-0.2, 1.2]
+    return (u * 1.4) - 0.2
 
 def analyze_results(sampler, savepath):
     """
@@ -119,7 +121,8 @@ def analyze_results(sampler, savepath):
     print(f"Weight coefficient of variation: {np.std(weights)/np.mean(weights):.3f}")
     
     # Transform samples to the coordinate system used in log_density
-    transformed_samples = (samples * 1.4) - 0.2
+    # Samples are already in physical space (transformed by sampler)
+    transformed_samples = samples
     
     # Compute weighted statistics
     weighted_mean = np.average(transformed_samples, weights=weights, axis=0)
@@ -130,14 +133,16 @@ def analyze_results(sampler, savepath):
     print(f"Weighted std (transformed coordinates): {weighted_std}")
     
     # Find best samples
-    log_densities = sampler.log_density_func(samples)
+    # Note: For finding best log-density, we must evaluate using the physical coordinates
+    # log_density_func in Sampler wraps prior_transform, so we should call the raw log_density
+    # function directly with our physical samples.
+    log_densities = log_density(samples)
     best_idx = np.argmax(log_densities)
     best_sample = samples[best_idx]
     best_log_density = log_densities[best_idx]
     
     print(f"\nBest sample found:")
-    print(f"  Coordinates (unit cube): {best_sample}")
-    print(f"  Coordinates (transformed): {(best_sample * 1.4) - 0.2}")
+    print(f"  Coordinates (physical): {best_sample}")
     print(f"  Log-density: {best_log_density:.2f}")
     
     # Mode detection (simple clustering based on high-density samples)
@@ -218,8 +223,8 @@ def visualize_marginal_distributions(sampler, savepath):
     
     def gaussian_mixture_likelihood(x, mode, variance=1/(2*400)):
         """Calculate the density for a single mode in the GMM for a 1D projection."""
-        x_transformed = 1.4*x - 0.2
-        return norm.pdf(x_transformed, loc=mode, scale=np.sqrt(variance))
+        # x is already in physical coordinates
+        return norm.pdf(x, loc=mode, scale=np.sqrt(variance))
     
     # Mode positions for each dimension (from the global MODES array)
     mode_positions = MODES  # shape: (10, 10)
@@ -239,7 +244,7 @@ def visualize_marginal_distributions(sampler, savepath):
     else:
         axes = axes.flatten()
     
-    x_range = np.linspace(0, 1, 1000)
+    x_range = np.linspace(-0.2, 1.2, 1000)
     
     for i in range(ndim):
         ax = axes[i]
@@ -253,17 +258,16 @@ def visualize_marginal_distributions(sampler, savepath):
         
         # Analytical marginal density
         # Sum over all modes for this dimension
+        # Note: Removing the *1.4 scaling factor as we are now in the physical space density
         gmm_curve = np.sum([gaussian_mixture_likelihood(x_range, mode=mode_positions[j, i]) 
-                           for j in range(len(mode_positions))], axis=0) / len(mode_positions) * 1.4
+                           for j in range(len(mode_positions))], axis=0) / len(mode_positions)
         ax.plot(x_range, gmm_curve, color='grey', linestyle='-', linewidth=1.5, 
                 label='True marginal')
         
         # Mark the true mode positions for this dimension
         true_modes_this_dim = mode_positions[:, i]
-        # Transform back to unit cube: mode = (x + 0.2) / 1.4
-        true_modes_unit = (true_modes_this_dim + 0.2) / 1.4
-        # Filter modes that are within [0,1]
-        valid_modes = true_modes_unit[(true_modes_unit >= 0) & (true_modes_unit <= 1)]
+        # Modes are already in physical coordinates
+        valid_modes = true_modes_this_dim[(true_modes_this_dim >= -0.2) & (true_modes_this_dim <= 1.2)]
         
         for mode_pos in valid_modes:
             ax.axvline(x=mode_pos, color='red', linestyle='--', alpha=0.6, linewidth=1)
@@ -271,7 +275,7 @@ def visualize_marginal_distributions(sampler, savepath):
         # Formatting
         ax.set_title(f'Dimension {i+1} Marginal Distribution', fontsize=14)
         ax.set_ylabel('Density', fontsize=12)
-        ax.set_xlim(0, 1)
+        ax.set_xlim(-0.2, 1.2)
         ax.set_xticks([0, 0.5, 1])
         ax.tick_params(axis='x', labelsize=10)
         ax.grid(True, alpha=0.3)
@@ -300,9 +304,9 @@ def visualize_marginal_distributions(sampler, savepath):
     
     # Create a 2D corner plot for the first few dimensions
     if ndim >= 2:
-        create_corner_plot(samples, weights, savepath, max_dims=min(4, ndim))
+        create_corner_plot(samples, weights, savepath, max_dims=min(4, ndim), bounds=(-0.2, 1.2))
 
-def create_corner_plot(samples, weights, savepath, max_dims=4):
+def create_corner_plot(samples, weights, savepath, max_dims=4, bounds=(0, 1)):
     """
     Create a corner plot showing 1D and 2D marginal densities.
     
@@ -316,6 +320,8 @@ def create_corner_plot(samples, weights, savepath, max_dims=4):
         Save path
     max_dims : int
         Maximum number of dimensions to include
+    bounds : tuple
+        Plot limits (min, max)
     """
     try:
         import matplotlib.pyplot as plt
@@ -341,10 +347,10 @@ def create_corner_plot(samples, weights, savepath, max_dims=4):
             
             if i == j:
                 # Diagonal: 1D marginal
-                hist, bin_edges = np.histogram(samples_subset[:, i], bins=30, weights=weights, density=True)
+                hist, bin_edges = np.histogram(samples_subset[:, i], bins=100, weights=weights, density=True)
                 bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
                 ax.plot(bin_centers, hist, color='green', linewidth=2)
-                ax.set_xlim(0, 1)
+                ax.set_xlim(bounds[0], bounds[1])
                 ax.set_title(f'Dim {i+1}')
                 
             elif i > j:
@@ -352,14 +358,14 @@ def create_corner_plot(samples, weights, savepath, max_dims=4):
                 H, xedges, yedges, img = ax.hist2d(
                     samples_subset[:, j],
                     samples_subset[:, i],
-                    bins=40,
-                    range=[[0, 1], [0, 1]],
+                    bins=100,
+                    range=[bounds, bounds],
                     weights=weights,
                     density=True,
                     cmap='viridis'
                 )
-                ax.set_xlim(0, 1)
-                ax.set_ylim(0, 1)
+                ax.set_xlim(bounds[0], bounds[1])
+                ax.set_ylim(bounds[0], bounds[1])
 
                 # Overlay 1, 2, 3-sigma mass contours for 2D Gaussian
                 dx = np.diff(xedges)[0]
@@ -452,8 +458,7 @@ def main():
         gamma=100,                    # Covariance update frequency
         exclude_scale_z=np.inf,       # No exclusion based on weights
         use_pool=False,               # Set to True for multiprocessing
-        n_pool=4,                      # Number of processes (if use_pool=True)
-        distance_merge=False
+        n_pool=4                      # Number of processes (if use_pool=True)
     )
     
     print(f"Problem dimension: {ndim}")
@@ -477,9 +482,36 @@ def main():
     print("Preparing LHS samples...")
     sampler.prepare_lhs_samples(lhs_num=int(1e5), batch_size=100)
     
+    # -------------------------------------------------------------------------
+    # Advanced Usage: Custom Initialization / External LHS
+    # -------------------------------------------------------------------------
+    # If you want to use a specific set of starting points (e.g. from Sobol 
+    # sequence, or specific physical locations), you can generate them externally
+    # and pass them to run_sampling. This skips prepare_lhs_samples.
+    #
+    # from smt.sampling_methods import LHS
+    # lhs_num = int(1e5)
+    # xlimits = np.array([[0, 1]] * ndim)
+    # sampling = LHS(xlimits=xlimits, random_state=42)
+    # ext_points = sampling(lhs_num)  # Must be in [0, 1] unit cube!
+    #
+    # # You must also provide their log-densities
+    # # Note: Calculate densities using PHYSICAL coordinates if prior_transform is set
+    # ext_log_densities = np.array([log_density(prior_transform(p)) for p in ext_points])
+    #
+    # sampler.run_sampling(
+    #     num_iterations=10000, 
+    #     savepath=savepath,
+    #     external_lhs_points=ext_points,
+    #     external_lhs_log_densities=ext_log_densities
+    # )
+    # -------------------------------------------------------------------------
+    
     # Run the sampling process
-    print("Starting sampling process...")
-    print("(This may take several minutes for 10,000 iterations)")
+    print("\nStarting sampling process...")
+    print("Note: The progress bar (tqdm) may initially estimate a long runtime (e.g., ~1 hour).")
+    print("However, as parallel processes converge and merge, the sampling speed increases significantly.")
+    print("This example typically completes in about 10 minutes.")
     
     try:
         sampler.run_sampling(

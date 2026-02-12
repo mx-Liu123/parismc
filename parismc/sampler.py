@@ -44,14 +44,37 @@ logger = logging.getLogger(__name__)
 class SamplerConfig:
     """Configuration parameters for the Sampler.
 
-    Notes on merging parameter:
-    - merge_confidence p in [0, 1] maps to a dimension-aware Mahalanobis
-      threshold R_m via R_m = find_sigma_level(ndim, p).
-      Larger p -> larger R_m (more permissive). Edge cases: p=0 => R_m=0;
-      p->1 => R_m->infinity.
-    - When considering whether to merge two processes, distances are computed
-      with respect to each process's own covariance (asymmetric Mahalanobis
-      distances); the smaller of the two distances is compared to R_m.
+    Parameters
+    ----------
+    merge_confidence : float
+        (Optional, for 'distance' merge_type only) Probability mass inside merge radius R_m.
+        Default 0.9.
+    alpha : int
+        Number of most recent samples used for importance weighting (sliding window size).
+    trail_size : int
+        Maximum number of attempts (MaxResample) after rejecting an invalid sample.
+    boundary_limiting : bool
+        Enable boundary constraint handling for [0,1]^d unit cube.
+    use_beta : bool
+        Apply Beta correction for boundary truncation effects.
+    integral_num : int
+        Number of MC samples for beta coefficient estimation.
+    gamma : int
+        Frequency of covariance matrix updates (in iterations).
+    exclude_scale_z : float
+        Exclusion scale for outlier detection (default: inf).
+    use_pool : bool
+        Enable multiprocessing.
+    n_pool : int
+        Number of parallel processes.
+    stop_on_merge : bool
+        Stop sampling if a merge occurs.
+    merge_type : str
+        Merging strategy: 'distance', 'single' (default), or 'multiple'.
+    cov_jitter : float
+        Numerical jitter added to covariance diagonal for stability (epsilon).
+    debug : bool
+        Enable debug logging.
     """
     seed: Optional[int] = None
     merge_confidence: float = 0.9  # Probability mass inside merge radius R_m (0→R_m=0, 1→R_m→∞)
@@ -66,6 +89,7 @@ class SamplerConfig:
     n_pool: int = 10
     stop_on_merge: bool = False
     merge_type: str = 'single' # 'distance', 'single', or 'multiple'
+    cov_jitter: float = 1e-10
     debug: bool = False
 
 class Sampler:
@@ -169,6 +193,7 @@ class Sampler:
         self.n_pool = config.n_pool
         self.stop_on_merge = config.stop_on_merge
         self.merge_type = config.merge_type
+        self.cov_jitter = config.cov_jitter
         self.debug = config.debug
         
         if self.merge_type not in ['distance', 'single', 'multiple']:
@@ -797,6 +822,9 @@ class Sampler:
                     else:
                         beta = np.ones((self.ndim))
                     covariance, shrinkage = oracle_approximating_shrinkage(covariance, n_samples)
+                
+                # Apply jitter for numerical stability
+                covariance += np.eye(self.ndim) * self.cov_jitter
                 
                 sign, log_det_cov = np.linalg.slogdet(covariance)
                 if sign <= 0 or log_det_cov < self.MIN_LOG_DET_COV:

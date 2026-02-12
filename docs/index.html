@@ -96,63 +96,40 @@
     <section id="algorithm">
         <h2>Algorithm</h2>
         
-        <h3>PARIS Algorithm (Simplified Implementation)</h3>
-        
-        <h4>Initialization (T=1)</h4>
+        <h3>PARIS Algorithm (Practical Implementation)</h3>
+        <p>PARIS employs a robust adaptive strategy (detailed in Algorithm 2 of the paper) to ensuring numerical stability and computational efficiency in high dimensions.</p>
+
+        <h4>Initialization (t=1)</h4>
         <ol>
-            <li><strong>Distribute N<sub>LHS</sub> LHS points</strong> across all prior regions</li>
-            <li><strong>Select N<sub>seed</sub> points</strong> with highest posterior as process initializations {x<sub>seed</sub><sup>(j)</sup>}<sub>j=1</sub><sup>N<sub>proc</sub></sup></li>
-            <li><strong>For each process</strong> x<sub>seed</sub><sup>(j)</sup> (j = 1, ..., N<sub>proc</sub>):
+            <li>Distribute <strong>N<sub>LHS</sub></strong> points via Latin Hypercube Sampling.</li>
+            <li>Select <strong>N<sub>seed</sub></strong> seeds {x<sub>seed</sub><sup>(j)</sup>} to initialize parallel processes.</li>
+            <li>Initial proposal: q<sub>1</sub><sup>(j)</sup>(x) = <span style="font-family: serif;">Ñ</span>(x | x<sub>seed</sub><sup>(j)</sup>, &Sigma;<sub>init</sub>), where <span style="font-family: serif;">Ñ</span> is a <strong>Modified Gaussian</strong> (rescaled peak).</li>
+        </ol>
+
+        <h4>General Iteration (t > 1)</h4>
+        <p>For each process <em>j</em>:</p>
+        <ol>
+            <li><strong>Covariance Update</strong>: Every <strong>&gamma;</strong> iterations, update &Sigma;<sub>&lceil;t/&gamma;&rceil;</sub><sup>(j)</sup> using the weighted sample history.
                 <ul>
-                    <li>3.1) Predefine proposal covariance Σ<sub>1</sub><sup>(j)</sup> = Σ<sub>init</sub></li>
-                    <li>3.2) Generate first sample: x<sub>1</sub><sup>(j)</sup> ~ N(x | x<sub>seed</sub><sup>(j)</sup>, Σ<sub>1</sub><sup>(j)</sup>)</li>
-                    <li>3.3) Initialize importance weight: w<sub>1</sub><sup>(j)</sup> = P(x<sub>1</sub><sup>(j)</sup>) / q<sub>1</sub><sup>(j)</sup>(x<sub>1</sub><sup>(j)</sup>)</li>
+                    <li>Includes <strong>OAS shrinkage</strong> and <strong>Beta correction</strong> for boundaries.</li>
+                    <li>Adds numerical jitter <strong>&epsilon; I<sub>p</sub></strong> (default &epsilon;=10<sup>-10</sup>) for stability.</li>
                 </ul>
+            </li>
+            <li><strong>Mixture Proposal</strong>: Construct a proposal using a sliding window of the latest <strong>&alpha;</strong> samples:
+                <div class="code-block">q<sub>t</sub><sup>(j)</sup>(x) &propto; &Sigma;<sub>t' &in; Window</sub> w<sub>t'</sub><sup>(j)</sup> <span style="font-family: serif;">Ñ</span>(x | x<sub>t'</sub><sup>(j)</sup>, &Sigma;<sub>&lceil;t/&gamma;&rceil;</sub><sup>(j)</sup>)</div>
+                where <span style="font-family: serif;">Ñ</span> is the Modified Gaussian to prevent self-weight dominance.
+            </li>
+            <li><strong>Sampling</strong>: Draw x<sub>t</sub><sup>(j)</sup> ~ q<sub>t</sub><sup>(j)</sup>(x).</li>
+            <li><strong>Weight Update</strong>: Update importance weights for all live samples in the window:
+                <div class="code-block">w<sub>t'</sub><sup>(j)</sup> &larr; P(x<sub>t'</sub><sup>(j)</sup>) / [ (1/min(t, &alpha;)) * &Sigma;<sub>k &in; Window</sub> <span style="font-family: serif;">Ñ</span>(x<sub>t'</sub><sup>(j)</sup> | y<sub>k</sub><sup>(j)</sup>, &Sigma;<sub>&lceil;k/&gamma;&rceil;</sub><sup>(j)</sup>) ]</div>
             </li>
         </ol>
 
-        <h4>General Iteration (T > 1)</h4>
-        <ol>
-            <li><strong>For each process</strong> j = 1, ..., N<sub>proc</sub>:
-                <ul>
-                    <li>1.1) <strong>Compute weighted mean and covariance</strong>:</li>
-                </ul>
-                <div class="code-block">μ<sub>T</sub><sup>(j)</sup> = Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup> x<sub>t</sub><sup>(j)</sup> / Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup>
-
-Σ<sub>T</sub><sup>(j)</sup> = Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup> (x<sub>t</sub><sup>(j)</sup> - μ<sub>T</sub><sup>(j)</sup>)(x<sub>t</sub><sup>(j)</sup> - μ<sub>T</sub><sup>(j)</sup>)<sup>T</sup> / Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup></div>
-                <ul>
-                    <li>1.2) <strong>Define proposal</strong> as weighted Gaussian mixture:</li>
-                </ul>
-                <div class="code-block">q<sub>T</sub><sup>(j)</sup>(x) = Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup> N(x | x<sub>t</sub><sup>(j)</sup>, Σ<sub>T</sub><sup>(j)</sup>) / Σ<sub>t=1</sub><sup>T-1</sup> w<sub>t</sub><sup>(j)</sup></div>
-                <ul>
-                    <li>1.3) <strong>Choose component</strong> N(x | y<sub>T</sub><sup>(j)</sup>, Σ<sub>T</sub><sup>(j)</sup>) from q<sub>T</sub><sup>(j)</sup>(x)</li>
-                    <li>1.4) <strong>Draw new sample</strong> x<sub>T</sub><sup>(j)</sup> from N(x | y<sub>T</sub><sup>(j)</sup>, Σ<sub>T</sub><sup>(j)</sup>)</li>
-                    <li>1.5) <strong>Update past importance weights</strong> for t = 1, ..., T:</li>
-                </ul>
-                <div class="code-block">w<sub>t</sub><sup>(j)</sup> ← P(x<sub>t</sub><sup>(j)</sup>) / (1/T × Σ<sub>t'=1</sub><sup>T</sup> q<sub>t'</sub><sup>(j)</sup>(x<sub>t</sub><sup>(j)</sup>))</div>
-                <ul>
-                    <li>1.6) <strong>Save weighted samples</strong> and proposals at iteration T</li>
-                </ul>
-            </li>
-            <li><strong>Process Interaction</strong>:
-                <ul>
-                    <li>2.1) Initialize all processes as unvisited</li>
-                    <li>2.2) <strong>For each unvisited process</strong> mean μ<sub>T</sub><sup>(j)</sup>, find neighbors μ<sub>T</sub><sup>(j')</sup> satisfying:</li>
-                </ul>
-                <div class="code-block">R<sub>j'→j</sub> = √((μ<sub>T</sub><sup>(j')</sup> - μ<sub>T</sub><sup>(j)</sup>)<sup>T</sup> [Σ<sub>T</sub><sup>(j)</sup>]<sup>-1</sup> (μ<sub>T</sub><sup>(j')</sup> - μ<sub>T</sub><sup>(j)</sup>)) ≤ R<sub>m</sub></div>
-                <ul>
-                    <li>2.3) <strong>Form clusters</strong> of j and neighbors, mark as visited</li>
-                    <li>2.4) <strong>In each cluster</strong>, retain process with highest posterior max P(x<sub>T</sub><sup>(j)</sup>), terminate others</li>
-                </ul>
-            </li>
-        </ol>
-
-        <h4>Advanced Implementation Notes</h4>
+        <h4>Process Interaction (Merging)</h4>
         <ul>
-            <li>Covariance matrices updated every <strong>γ iterations</strong> (practical version)</li>
-            <li>Truncation uses latest <strong>α samples</strong> for weighting calculations</li>
-            <li><strong>Beta correction</strong> applied for boundary effects when >10% samples fall outside [0,1]<sup>d</sup></li>
-            <li><strong>OAS shrinkage</strong> applied for robust covariance estimation with small samples</li>
+            <li><strong>Check Dominance</strong>: Processes compare their local proposal densities at the current sample point.</li>
+            <li><strong>Clustering</strong>: If process <em>j'</em> covers <em>j</em> (i.e., provides higher density), they are clustered.</li>
+            <li><strong>Selection</strong>: Only the process with the highest posterior peak in each cluster survives; others are terminated to avoid redundancy.</li>
         </ul>
     </section>
 
@@ -296,8 +273,12 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)</div>
     <section id="key-hyperparameters">
         <h2>Key Hyperparameters</h2>
         <ul>
-            <li><strong>merge_confidence (p)</strong>: Controls the merge radius (Mahalanobis threshold) between seeds. <em>p = 0.9</em> is generally fine for most problems.</li>
-            <li><strong>alpha</strong>: Number of most recent samples used for importance weighting (truncation window). A conservative and safe choice is <em>alpha = 10000</em>. <em>(Called <code>latest_prob_index</code> in older docs.)</em></li>
+            <li><strong>alpha (&alpha;)</strong>: Number of most recent samples used for importance weighting (sliding window). <em>&alpha; = 1000</em> works well in many cases; a conservative choice is <em>&alpha; = 10000</em>.</li>
+            <li><strong>cov_jitter (&epsilon;)</strong>: Numerical jitter added to the covariance matrix diagonal for stability (default <em>10<sup>-10</sup></em>).</li>
+            <li><strong>gamma (&gamma;)</strong>: Frequency of covariance matrix updates (in iterations). Default is 100.</li>
+            <li><strong>n_lhs (N<sub>LHS</sub>)</strong>: Number of LHS points used to cover the prior for a global search. Recommend <em>N<sub>LHS</sub> &#8819; 50/f</em> where <em>f</em> is the fractional volume of a mode.</li>
+            <li><strong>n_seed (N<sub>seed</sub>)</strong>: Number of initial parallel processes. Robust rule: <em>10 &times;</em> expected number of modes.</li>
+            <li><strong>merge_confidence (p)</strong>: (Optional, for distance-based merging only) Controls the merge radius (Mahalanobis threshold) between seeds. Default <em>p = 0.9</em>.</li>
         </ul>
     </section>
 

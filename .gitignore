@@ -19,3 +19,5 @@ user_prompt.txt
 
 # Scripts that shouldn't be tracked (optional)
 verify_baseline.sh
+test_place/
+#draft.tex

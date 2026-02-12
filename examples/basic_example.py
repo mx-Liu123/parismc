@@ -21,25 +21,22 @@ INV_COV = np.linalg.inv(TRUE_COV)
 
 def log_density(x):
     """
-    Log-density for multivariate Gaussian in [0,1]^2 space.
+    Log-density for multivariate Gaussian.
     
-    Parameters:
-    ----------
-    x : array-like, shape (n_samples, 2)
-        Sample points in [0,1]^2
-        
-    Returns:
-    -------
-    array-like, shape (n_samples,)
-        Log-density values
+    If prior_transform is used, 'x' will be in physical space.
+    Otherwise, 'x' is in [0,1]^2.
     """
-    
     # Compute Mahalanobis distance
     diff = x - TRUE_MEAN
     mahal_dist = np.einsum('ij,jk,ik->i', diff, INV_COV, diff)
     
     # Return log-density (without normalization constant)
     return -0.5 * mahal_dist
+
+# Example of a prior transform (commented out):
+# def prior_transform(u):
+#     # Map [0, 1] to physical range, e.g., [0, 10]
+#     return u * 10.0
 
 def main():
     

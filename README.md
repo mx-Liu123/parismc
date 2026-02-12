@@ -16,54 +16,16 @@ This adaptive–parallel design allows PARIS to efficiently discover, refine, an
 
 📖 **[Visit the official documentation site](https://mx-liu123.github.io/parismc/)** for detailed usage guides, API reference, and examples.
 
-## Algorithm
+## How it Works
 
-### PARIS Algorithm (Simplified Implementation)
+PARIS combines the exploratory power of global sampling with the precision of local adaptation.
 
-**Initialization (T=1)**
+1.  **Global Exploration**: The sampler begins with **Latin Hypercube Sampling (LHS)** to uniformly cover the prior and identify promising regions.
+2.  **Local Adaptation**: Multiple parallel "seeds" explore these regions independently. Each seed builds a **local Gaussian Mixture** proposal that adapts to its own sample history, automatically focusing on high-density modes.
+3.  **Parallel Merging**: As parallel processes evolve, they monitor each other. If two seeds converge toward the same mode, they **automatically merge** to eliminate redundancy and save computational resources.
+4.  **Efficient Reweighting**: A **sliding window** mechanism ensures that importance weights remain accurate even in high dimensions, keeping the computational cost per iteration constant regardless of the total sample size.
 
-1. **Distribute N_LHS LHS points** across all prior regions
-2. **Select N_seed points** with highest posterior as process initializations {x_seed^(j)}_{j=1}^{N_proc}
-3. **For each process** x_seed^(j) (j = 1, ..., N_proc):
-   - 3.1) Predefine proposal covariance Σ₁^(j) = Σ_init  
-   - 3.2) Generate first sample: x₁^(j) ~ N(x | x_seed^(j), Σ₁^(j))
-   - 3.3) Initialize importance weight: w₁^(j) = P(x₁^(j)) / q₁^(j)(x₁^(j))
-
-**General Iteration (T > 1)**
-
-1. **For each process** j = 1, ..., N_proc:
-   - 1.1) **Compute weighted mean and covariance**:
-     ```
-     μ_T^(j) = Σ_{t=1}^{T-1} w_t^(j) x_t^(j) / Σ_{t=1}^{T-1} w_t^(j)
-     
-     Σ_T^(j) = Σ_{t=1}^{T-1} w_t^(j) (x_t^(j) - μ_T^(j))(x_t^(j) - μ_T^(j))^T / Σ_{t=1}^{T-1} w_t^(j)
-     ```
-   - 1.2) **Define proposal** as weighted Gaussian mixture:
-     ```
-     q_T^(j)(x) = Σ_{t=1}^{T-1} w_t^(j) N(x | x_t^(j), Σ_T^(j)) / Σ_{t=1}^{T-1} w_t^(j)
-     ```
-   - 1.3) **Choose component** N(x | y_T^(j), Σ_T^(j)) from q_T^(j)(x)
-   - 1.4) **Draw new sample** x_T^(j) from N(x | y_T^(j), Σ_T^(j))
-   - 1.5) **Update past importance weights** for t = 1, ..., T:
-     ```
-     w_t^(j) ← P(x_t^(j)) / (1/T × Σ_{t'=1}^T q_{t'}^(j)(x_t^(j)))
-     ```
-   - 1.6) **Save weighted samples** and proposals at iteration T
-
-2. **Process Interaction**:
-   - 2.1) Initialize all processes as unvisited
-   - 2.2) **For each unvisited process** mean μ_T^(j), find neighbors μ_T^(j') satisfying:
-     ```
-     R_{j'→j} = √((μ_T^(j') - μ_T^(j))^T [Σ_T^(j)]^{-1} (μ_T^(j') - μ_T^(j))) ≤ R_m
-     ```
-   - 2.3) **Form clusters** of j and neighbors, mark as visited
-   - 2.4) **In each cluster**, retain process with highest posterior max P(x_T^(j)), terminate others
-
-**Advanced Implementation Notes:**
-- Covariance matrices updated every **γ iterations** (practical version)
-- Truncation uses latest **α samples** for weighting calculations  
-- **Beta correction** applied for boundary effects when >10% samples fall outside [0,1]^d
-- **OAS shrinkage** applied for robust covariance estimation with small samples
+*For the rigorous mathematical derivation and implementation details, please refer to the [User Guide](https://mx-liu123.github.io/parismc/user/guide.html) and our paper.*
 
 ## Performance
 
@@ -101,6 +63,7 @@ PARIS demonstrates exceptional efficiency in high-dimensional, multi-modal scena
 * **Boundary-safe** – Automatically respects [0,1]^d priors.
 * **Multiprocessing Ready** – Runs smoothly across CPU cores for large inference tasks.
 * **Reproducibility** – Fully deterministic execution when a ``seed`` is provided, ensuring consistent results across runs.
+* **Flexible Initialization** – Support for user-provided starting points (e.g. from Sobol sequences or specific physical locations) via the External LHS interface.
 
 ## Installation
 
@@ -184,7 +147,31 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)
 
 ## Advanced Usage
 
-## Multiprocessing Caveats
+### Custom Prior Transform
+
+PARIS works internally in the $[0, 1]^d$ unit hypercube. If your parameters have physical bounds (e.g., mass, distance), use a `prior_transform` function to map the unit cube to your physical space.
+
+**Note**: Your `log_density` function will receive the **transformed (physical)** parameters.
+
+```python
+from scipy.stats import norm
+
+def prior_transform(u):
+    """Map unit cube [0, 1] to physical space."""
+    x = np.copy(u)
+    # Param 0: Uniform [-5, 5]
+    x[:, 0] = u[:, 0] * 10 - 5
+    # Param 1: Normal(0, 1)
+    x[:, 1] = norm.ppf(u[:, 1])
+    return x
+
+sampler = Sampler(
+    ...,
+    prior_transform=prior_transform
+)
+```
+
+### Multiprocessing Caveats
 
 - Windows/macOS and notebooks use the "spawn" start method. Always guard code with `if __name__ == "__main__":` when `use_pool=True`.
 - Define `log_density` and `prior_transform` at module top level. Avoid lambdas, inner functions, or closures; they are not pickleable for `multiprocessing.Pool`.
@@ -274,12 +261,11 @@ config = SamplerConfig(
 
 ### Key Hyperparameters
 
-- merge_confidence: Controls the merge radius between parallel seeds via a Mahalanobis threshold. merge_confidence=0.9 is generally a good default; increase if modes are broad and overlapping, decrease if modes are tight and distinct.
-- alpha: Number of most recent samples used for importance weighting (truncation window). alpha=1000 works well in many cases; a conservative and safe choice is alpha=10000 (older docs called this latest_prob_index).
-- n_lhs (`lhs_num` in API): Number of LHS points used to cover the prior for a global search of good starting points. Estimate it from the relative size of a typical mode vs the prior region. If a mode occupies fraction f of the prior volume, choose lhs_num ≳ c/f (c≈50–200) so each mode gets multiple hits. Pragmatic ranges are 1e3–1e5 depending on dimension.
-- n_seed: Depends on your conservative estimate of the total number of modes. A robust rule is 10× the expected number of modes to avoid missing weaker ones.
-- init_cov_list: Initial covariance per process. Use a conservative small estimate of mode size, or the inverse Fisher matrix if available. On a [0,1]^d unit cube, a good starting point is diag((0.05–0.1)^2) scaled per-dimension.
-- Less sensitive: `alpha` and `merge_confidence` are typically robust. Defaults often suffice; try `alpha=10000` and `p=0.9` for safe, general settings.
+*   **n_lhs**: Number of initial search points. Use higher values for high-dimensional spaces or very narrow modes.
+*   **n_seed**: Number of initial parallel processes. Typically set to a few times the expected number of modes.
+*   **alpha**: Size of the sliding window for weighting. Controls local resolution and how much past information is retained.
+
+*For a full list of configuration options and tuning tips, please refer to the [User Guide](https://mx-liu123.github.io/parismc/user/guide.html).*
 
 ## API Reference
 
