@@ -23,6 +23,17 @@ extensions = [
     "nbsphinx",
 ]
 
+# Mock imports to ensure autodoc works even if dependencies are missing
+autodoc_mock_imports = [
+    "numpy",
+    "scipy",
+    "smt",
+    "sklearn",
+    "tqdm",
+    "matplotlib",
+    "corner"
+]
+
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
