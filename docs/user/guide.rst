@@ -22,11 +22,7 @@ The following parameters usually work well with their defaults:
 - **gamma ($\gamma$)**: How often the local covariance is updated (in iterations). Default is 100.
 - **merge_confidence (p)**: *(Distance-merging only)* Used to calculate the Mahalanobis threshold. Default $p=0.9$.
 - **trail_size**: Maximum number of attempts to find a valid point within prior boundaries during rejection sampling.
-
-- **n_lhs ($N_{\text{LHS}}$)**: Number of LHS points covering the prior for a global search of good start points. Estimate from the relative size of a typical mode to the prior region. If a mode occupies fraction $f$ of the prior volume, pick $N_{\text{LHS}} \gtrsim 50/f$ to get several hits per mode; $10^3$--$10^5$ is common depending on dimension.
-- **n_seed ($N_{\text{seed}}$)**: Depends on a conservative estimate of total mode count. Recommended $N_{\text{seed}} = 10 \times$ expected modes to avoid missing weaker modes.
-- **init_cov_list ($\Sigma_{\text{init}}$)**: Initial covariance for each process. Use a conservative small estimate of mode size, or the inverse Fisher matrix when available. On a unit cube, $\text{diag}((0.05\text{--}0.1)^2)$ per dimension is a reasonable start.
-- **Less sensitive**: $\alpha$ and $\gamma$ are typically robust. Defaults often suffice; try $\alpha=10000$ for a safe, general setting.
+- **keep_dead_processes**: If set to ``True``, the sampler will gracefully archive the trimmed sample histories of merged (dead) processes instead of discarding them. This is extremely memory-efficient and allows advanced users to analyze the entire exploration trajectory by calling ``sampler.get_samples_with_weights(include_dead=True)``. Defaults to ``False``.
 
 Using Prior Transforms
 ----------------------

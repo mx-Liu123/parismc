@@ -147,6 +147,27 @@ samples, weights = sampler.get_samples_with_weights(flatten=True)
 
 ## Advanced Usage
 
+### Archiving Dead Processes (Full Exploration History)
+
+By default, when parallel seeds merge, the redundant (dead) processes are discarded to save memory. However, advanced users may want to analyze the entire exploration trajectory. 
+
+You can enable this by setting `keep_dead_processes=True` in `SamplerConfig`. The sampler will elegantly trim and archive the valid sample history of dead processes before garbage collection, keeping memory overhead minimal.
+
+To retrieve these archived samples along with the surviving ones, simply pass `include_dead=True` when extracting results:
+
+```python
+# Enable archiving
+config = SamplerConfig(keep_dead_processes=True)
+sampler = Sampler(..., config=config)
+sampler.run_sampling(...)
+
+# Retrieve ALL samples (both surviving and dead processes)
+all_samples, all_weights = sampler.get_samples_with_weights(
+    flatten=True, 
+    include_dead=True
+)
+```
+
 ### Custom Prior Transform
 
 PARIS works internally in the $[0, 1]^d$ unit hypercube. If your parameters have physical bounds (e.g., mass, distance), use a `prior_transform` function to map the unit cube to your physical space.
