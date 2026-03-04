@@ -73,6 +73,8 @@ class SamplerConfig:
         Merging strategy: 'distance', 'single' (default), or 'multiple'.
     cov_jitter : float
         Numerical jitter added to covariance diagonal for stability (epsilon).
+    keep_dead_processes : bool
+        If True, trimmed histories of dead/merged processes are archived to save memory but kept for analysis.
     debug : bool
         Enable debug logging.
     """
@@ -90,6 +92,7 @@ class SamplerConfig:
     stop_on_merge: bool = False
     merge_type: str = 'single' # 'distance', 'single', or 'multiple'
     cov_jitter: float = 1e-10
+    keep_dead_processes: bool = False
     debug: bool = False
 
 class Sampler:
@@ -194,6 +197,7 @@ class Sampler:
         self.stop_on_merge = config.stop_on_merge
         self.merge_type = config.merge_type
         self.cov_jitter = config.cov_jitter
+        self.keep_dead_processes = config.keep_dead_processes
         self.debug = config.debug
         
         if self.merge_type not in ['distance', 'single', 'multiple']:
@@ -214,6 +218,11 @@ class Sampler:
             self.pool = Pool(self.n_pool)
         else:
             self.pool = None
+
+        # Initialize archive for dead processes
+        self.archived_points: List[np.ndarray] = []
+        self.archived_log_densities: List[np.ndarray] = []
+        self.archived_wdeno: List[np.ndarray] = []
 
         # Initialize state variables
         self.searched_log_densities_list: List[np.ndarray] = []
@@ -474,6 +483,7 @@ class Sampler:
         self.loglike_normalization = selected_lhs_log_densities[0].copy()
         self.n_proc = self.n_seed
         self.maximum_array_size = int(self.batch_point_num * num_iterations)
+        self.total_evals = 0
 
         # Initialize lists
         for i in range(self.n_seed):
@@ -671,7 +681,7 @@ class Sampler:
                 # Merge Condition
                 if self.merge_type == 'single':
                     if np.mean(addon_weights) >= np.mean(current_weights):
-                        new_clusters.append([j, j_prime])
+                        new_clusters.append(sorted([j, j_prime]))
                         classified_indices.add(j)
                         classified_indices.add(j_prime)
                         found_merge = True
@@ -680,7 +690,7 @@ class Sampler:
                     # better_count = np.sum(addon_weights > current_weights/1)
                     better_count = np.sum(addon_weights > current_weights)
                     if len(addon_weights) > 0 and better_count > 0:
-                        new_clusters.append([j, j_prime])
+                        new_clusters.append(sorted([j, j_prime]))
                         classified_indices.add(j)
                         classified_indices.add(j_prime)
                         found_merge = True
@@ -715,7 +725,36 @@ class Sampler:
         else:
             cluster_indices = self._find_clusters_by_weight()
 
-        # 3. Implement merging logic
+        # 3. Archive dead processes if configured
+        if getattr(self, 'keep_dead_processes', False):
+            survivors = set([cluster[0] for cluster in cluster_indices])
+            for j in range(self.n_proc):
+                if j not in survivors:
+                    element_num = self.element_num_list[j]
+                    if element_num > 0:
+                        compact_points = self.searched_points_list[j][:element_num].copy()
+                        compact_logdens = self.searched_log_densities_list[j][:element_num].copy()
+                        compact_wdeno = self.wdeno_list[j][:element_num].copy()
+                        
+                        # Finalize wdeno for the last batch
+                        latest_batch_start = element_num - self.batch_point_num
+                        if latest_batch_start >= 0 and latest_batch_start < element_num:
+                            latest_points = compact_points[latest_batch_start:element_num]
+                            latest_cov_idx = int((element_num - 1) / self.cov_update_count)
+                            inv_cov = self.inv_covariances_list[j][latest_cov_idx]
+                            norm_term = self.gaussian_normterm_list[j][latest_cov_idx]
+                            all_means = self.means_list[j][:latest_batch_start]
+                            all_proposalcoeffs = self.proposalcoeff_list[j][:latest_batch_start]
+                            
+                            if len(all_means) > 0:
+                                latest_denos = weighting_seeds_manypoint(latest_points, all_means, inv_cov, norm_term, all_proposalcoeffs)
+                                compact_wdeno[latest_batch_start:element_num] = latest_denos
+                            
+                        self.archived_points.append(compact_points)
+                        self.archived_log_densities.append(compact_logdens)
+                        self.archived_wdeno.append(compact_wdeno)
+
+        # 4. Implement merging logic
         lists_to_merge = [
             self.wdeno_list, self.searched_points_list, self.inv_covariances_list, 
             self.gaussian_normterm_list, self.means_list, self.call_num_list, 
@@ -1100,6 +1139,7 @@ class Sampler:
             # Update State
             self.call_num_list[j][ind1:ind2] += calls_added
             self.eff_calls += eff_calls_added
+            self.total_evals += calls_added
             
             self.searched_log_densities_list[j][ind1:ind2] = final_log_densities.copy()
             self.searched_points_list[j][ind1:ind2] = final_points.copy()
@@ -1177,7 +1217,7 @@ class Sampler:
             if dlogZ is not None:
                 display_dlogZ = dlogZ
             # Report stats
-            status = f"samples: {Nsum}, evals: {calls}, n_proc: {self.n_proc}, cov[0]: {self.now_covariances[0][0, 0]:.5e}, logZ: {logZ:.5f}, dlogZ: {display_dlogZ:.5e}, max_ld: {self.max_logden_list[0]:.5f}"
+            status = f"samples: {Nsum}, evals: {int(self.total_evals)}, n_proc: {self.n_proc}, logZ: {logZ:.5f}, dlogZ: {display_dlogZ:.5e}, max_ld: {self.max_logden_list[0]:.5f}"
             pbar.set_description(status)
             if i % self.print_iter == 0:
                 pbar.update(self.print_iter)
@@ -1364,7 +1404,7 @@ class Sampler:
             weights_list.append(weights)
         return weights_list      
     
-    def get_samples_with_weights(self, flatten: bool = False) -> Union[Tuple[List[np.ndarray], List[np.ndarray]], Tuple[np.ndarray, np.ndarray]]:
+    def get_samples_with_weights(self, flatten: bool = False, include_dead: bool = False) -> Union[Tuple[List[np.ndarray], List[np.ndarray]], Tuple[np.ndarray, np.ndarray]]:
         """
         Get samples and their weights in the parameter space.
         
@@ -1373,6 +1413,9 @@ class Sampler:
         flatten : bool, optional
             If True, returns concatenated arrays of all samples and weights.
             If False, returns lists of arrays for each process. Default is False.
+        include_dead : bool, optional
+            If True, also includes samples from processes that were merged/terminated.
+            Requires keep_dead_processes=True in SamplerConfig. Default is False.
         
         Returns:
         -------
@@ -1384,6 +1427,14 @@ class Sampler:
         # Get weights
         weights_list = self.imp_weights_list()
         
+        # Process archived ones if requested
+        archived_samples_list = []
+        if include_dead and getattr(self, 'keep_dead_processes', False):
+            for k in range(len(self.archived_points)):
+                weights = np.exp(self.archived_log_densities[k] - self.loglike_normalization) / self.archived_wdeno[k]
+                weights_list.append(weights)
+                archived_samples_list.append(self.archived_points[k])
+        
         # Get transformed samples
         if self.prior_transform is not None:
             transformed_samples_list = []
@@ -1392,11 +1443,15 @@ class Sampler:
                 samples = self.searched_points_list[j][:element_num]
                 transformed_samples = self.apply_prior_transform(samples, self.prior_transform)
                 transformed_samples_list.append(transformed_samples)
+            for samples in archived_samples_list:
+                transformed_samples = self.apply_prior_transform(samples, self.prior_transform)
+                transformed_samples_list.append(transformed_samples)
         else:
             transformed_samples_list = []
             for j in range(self.n_proc):
                 element_num = self.element_num_list[j]
                 transformed_samples_list.append(self.searched_points_list[j][:element_num])
+            transformed_samples_list.extend(archived_samples_list)
         
         if flatten:
             # Concatenate all samples and weights
