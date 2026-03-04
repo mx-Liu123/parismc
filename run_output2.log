@@ -1,0 +1,21 @@
+Multimodal 10D Sampling Example
+===============================
+Problem dimension: 10
+Number of processes: 100
+Initial covariance scale: 0.01
+Save path: ./multimodal_results/
+Multiprocessing: False
+
+Initializing sampler...
+Preparing LHS samples...
+Computing LHS densities:   0%|          | 0/1000 [00:00<?, ?it/s]Computing LHS densities:  80%|███████▉  | 799/1000 [00:00<00:00, 7980.19it/s]Computing LHS densities: 100%|██████████| 1000/1000 [00:00<00:00, 7997.68it/s]
+
+Starting sampling process...
+Note: The progress bar (tqdm) may initially estimate a long runtime (e.g., ~1 hour).
+However, as parallel processes converge and merge, the sampling speed increases significantly.
+This example typically completes in about 10 minutes.
+Sampling:   0%|          | 0/9999 [00:00<?, ?it/s]/home/liumx/momentum_transformer/parismc/parismc/sampler.py:1179: RuntimeWarning: divide by zero encountered in log
+  logZ = c_term - np.log(Nsum) + np.log(wsum)
+/home/liumx/momentum_transformer/parismc/parismc/sampler.py:1179: RuntimeWarning: invalid value encountered in scalar add
+  logZ = c_term - np.log(Nsum) + np.log(wsum)
+samples: 0.0, evals: 100, n_proc: 100, logZ: nan, dlogZ: nan, max_ld: -53.29660:   0%|          | 0/9999 [00:00<?, ?it/s]samples: 4950.0, evals: 10088, n_proc: 99, logZ: -29.32583, dlogZ: nan, max_ld: -1.10314:   1%|          | 100/9999 [00:20<33:51,  4.87it/s]samples: 4950.0, evals: 10088, n_proc: 99, logZ: -29.32583, dlogZ: nan, max_ld: -1.10314:   2%|▏         | 200/9999 [00:20<16:45,  9.75it/s]

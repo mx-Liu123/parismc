@@ -55,6 +55,18 @@ Workflow
 Advanced Usage
 --------------
 
+Progress Bar Output
+~~~~~~~~~~~~~~~~~~~
+
+During ``run_sampling``, the terminal progress bar provides real-time updates:
+
+- **samples**: The number of valid samples currently held in the active sliding windows.
+- **evals**: The total cumulative number of likelihood function evaluations performed, including those from rejected trials and previously merged processes.
+- **n_proc**: The current number of active parallel processes. This naturally decreases as redundant modes are merged.
+- **logZ**: The current estimate of the log-evidence ($\ln \mathcal{Z}$).
+- **dlogZ**: The absolute difference in the log-evidence estimate compared to its value $\alpha$ iterations ago. This is used to trigger early stopping if ``stop_dlogZ`` is provided.
+- **max_ld**: The highest log-density (log-likelihood) value discovered so far across all active processes.
+
 Runtime Flags
 ~~~~~~~~~~~~~
 

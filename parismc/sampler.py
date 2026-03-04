@@ -137,6 +137,7 @@ class Sampler:
     GUESS_SIZE_DIVISOR = 2         # Divisor for guess size calculation
     MIN_GUESS_SIZE = 1             # Minimum guess size  
     EVIDENCE_ESTIMATION_FRACTION = 0.5  # Fraction of samples used for evidence estimation
+    STABILITY_CHECK_INTERVAL = 1000    # Fixed interval for stability (dlogZ) calculation
     
     def __init__(self, 
                  ndim: int, 
@@ -635,7 +636,9 @@ class Sampler:
             self.now_covariances, 
             dist=self.merge_dist
         )
-        return [sorted(sublist) for sublist in cluster_indices]
+        clusters = [sorted(sublist) for sublist in cluster_indices]
+        clusters.sort(key=lambda c: c[0])
+        return clusters
 
     def _find_clusters_by_weight(self) -> List[List[int]]:
         """Find clusters by cross-evaluating samples against other processes' proposals."""
@@ -704,6 +707,8 @@ class Sampler:
             if k not in classified_indices:
                 new_clusters.append([k])
         
+        # Sort clusters by their best (smallest) index to maintain overall ordering
+        new_clusters.sort(key=lambda c: c[0])
         return new_clusters
 
     def _merge_processes(self, i: int) -> bool:
@@ -1158,7 +1163,7 @@ class Sampler:
         except Exception as e:
             logger.error(f"Flag actions failed: {e}")
 
-        compute_logZ = (i % self.print_iter == 0) or (stop_dlogZ is not None and (i % self.alpha == 0))
+        compute_logZ = (i % self.print_iter == 0) or (stop_dlogZ is not None and (i % self.STABILITY_CHECK_INTERVAL == 0))
         logZ = None
         dlogZ = None
         
@@ -1174,8 +1179,8 @@ class Sampler:
             
             logZ = c_term - np.log(Nsum) + np.log(wsum)
 
-            if stop_dlogZ is not None and (i % self.alpha == 0):
-                if self._last_logZ_for_stop is not None and self._last_logZ_iter is not None and (i - self._last_logZ_iter) >= self.alpha:
+            if stop_dlogZ is not None and (i % self.STABILITY_CHECK_INTERVAL == 0):
+                if self._last_logZ_for_stop is not None and self._last_logZ_iter is not None and (i - self._last_logZ_iter) >= self.STABILITY_CHECK_INTERVAL:
                     dlogZ = abs(logZ - self._last_logZ_for_stop)
                     self._last_dlogZ = dlogZ
                 self._last_logZ_for_stop = logZ
@@ -1213,11 +1218,18 @@ class Sampler:
                 with open(baseline_file, 'w') as f:
                     json.dump(all_baselines, f, indent=4)
 
-            display_dlogZ = self._last_dlogZ if self._last_dlogZ is not None else np.nan
+            display_dlogZ = self._last_dlogZ if self._last_dlogZ is not None else "NULL"
             if dlogZ is not None:
                 display_dlogZ = dlogZ
+            
+            # Format logZ and dlogZ for display
+            display_logZ = f"{logZ:.5f}" if (logZ is not None and not np.isnan(logZ)) else "NULL"
+            
             # Report stats
-            status = f"samples: {Nsum}, evals: {int(self.total_evals)}, n_proc: {self.n_proc}, logZ: {logZ:.5f}, dlogZ: {display_dlogZ:.5e}, max_ld: {self.max_logden_list[0]:.5f}"
+            if isinstance(display_dlogZ, str):
+                status = f"samples: {Nsum}, evals: {int(self.total_evals)}, n_proc: {self.n_proc}, logZ: {display_logZ}, dlogZ: {display_dlogZ}, max_ld: {self.max_logden_list[0]:.5f}"
+            else:
+                status = f"samples: {Nsum}, evals: {int(self.total_evals)}, n_proc: {self.n_proc}, logZ: {display_logZ}, dlogZ: {display_dlogZ:.5e}, max_ld: {self.max_logden_list[0]:.5f}"
             pbar.set_description(status)
             if i % self.print_iter == 0:
                 pbar.update(self.print_iter)
