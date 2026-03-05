@@ -1163,7 +1163,7 @@ class Sampler:
         except Exception as e:
             logger.error(f"Flag actions failed: {e}")
 
-        compute_logZ = (i % self.print_iter == 0) or (stop_dlogZ is not None and (i % self.STABILITY_CHECK_INTERVAL == 0))
+        compute_logZ = (i % self.print_iter == 0) or (i % self.STABILITY_CHECK_INTERVAL == 0)
         logZ = None
         dlogZ = None
         
@@ -1179,7 +1179,8 @@ class Sampler:
             
             logZ = c_term - np.log(Nsum) + np.log(wsum)
 
-            if stop_dlogZ is not None and (i % self.STABILITY_CHECK_INTERVAL == 0):
+            # Always calculate dlogZ every STABILITY_CHECK_INTERVAL for monitoring
+            if i % self.STABILITY_CHECK_INTERVAL == 0:
                 if self._last_logZ_for_stop is not None and self._last_logZ_iter is not None and (i - self._last_logZ_iter) >= self.STABILITY_CHECK_INTERVAL:
                     dlogZ = abs(logZ - self._last_logZ_for_stop)
                     self._last_dlogZ = dlogZ
@@ -1234,6 +1235,7 @@ class Sampler:
             if i % self.print_iter == 0:
                 pbar.update(self.print_iter)
 
+            # Only check for early stopping if stop_dlogZ threshold was actually provided
             if stop_dlogZ is not None and dlogZ is not None and dlogZ <= stop_dlogZ:
                 self.current_iter = i + 1
                 stop_message = f"Early stopping at iter {i}: dlogZ={dlogZ:.5e} <= stop_dlogZ={stop_dlogZ:.5e}, logZ={logZ:.5f}"
