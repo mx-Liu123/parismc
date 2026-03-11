@@ -779,6 +779,7 @@ class Sampler:
         self.element_num_list = merge_element_num_list(self.element_num_list, cluster_indices)
         self.now_covariances = merge_max_list(self.now_covariances, cluster_indices)
         self.now_normterms = merge_max_list(self.now_normterms, cluster_indices)
+        self.init_cov_list = merge_max_list(self.init_cov_list, cluster_indices)
         
         n_proc_prev = self.n_proc
         self.n_proc = len(self.searched_log_densities_list)
