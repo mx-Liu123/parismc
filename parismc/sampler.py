@@ -245,6 +245,7 @@ class Sampler:
         self._last_logZ_for_stop: Optional[float] = None
         self._last_logZ_iter: Optional[int] = None
         self._last_dlogZ: Optional[float] = None
+        self.bad_logden_count = 0
 
         # Initialize flag file for external monitoring controls
         self.flag_file = os.path.join('.', 'sampler_flags.json')
@@ -282,6 +283,14 @@ class Sampler:
         for i in tqdm(range(0, lhs_num, batch_size), desc="Computing LHS densities"):
             end = min(i + batch_size, lhs_num)
             lhs_log_densities[i:end] = self.log_density_func(x[i:end])
+            
+            # Check for problematic values
+            bad_mask = ~np.isfinite(lhs_log_densities[i:end])
+            if np.any(bad_mask):
+                for _ in range(np.sum(bad_mask)):
+                    self.bad_logden_count += 1
+                    if self.bad_logden_count == 1 or self.bad_logden_count % 1000 == 0:
+                        logger.warning(f"Detected problematic log_density (NaN or Inf) {self.bad_logden_count} times. Check your implementation.")
             
         self.lhs_points_initial = x
         self.lhs_log_densities = lhs_log_densities
@@ -1141,6 +1150,14 @@ class Sampler:
                 final_log_densities = gaussian_log_densities
                 final_points = gaussian_points
                 final_means = gaussian_means
+
+            # Check for problematic values
+            bad_mask = ~np.isfinite(final_log_densities)
+            if np.any(bad_mask):
+                for _ in range(np.sum(bad_mask)):
+                    self.bad_logden_count += 1
+                    if self.bad_logden_count == 1 or self.bad_logden_count % 1000 == 0:
+                        logger.warning(f"Detected problematic log_density (NaN or Inf) {self.bad_logden_count} times. Check your implementation.")
 
             # Update State
             self.call_num_list[j][ind1:ind2] += calls_added
