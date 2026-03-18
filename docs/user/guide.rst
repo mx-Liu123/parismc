@@ -23,6 +23,7 @@ The following parameters usually work well with their defaults:
 - **merge_confidence (p)**: *(Distance-merging only)* Used to calculate the Mahalanobis threshold. Default $p=0.9$.
 - **trail_size**: Maximum number of attempts to find a valid point within prior boundaries during rejection sampling.
 - **keep_dead_processes**: If set to ``True``, the sampler will gracefully archive the trimmed sample histories of merged (dead) processes instead of discarding them. This is extremely memory-efficient and allows advanced users to analyze the entire exploration trajectory by calling ``sampler.get_samples_with_weights(include_dead=True)``. Defaults to ``False``.
+- **Automatic Anomaly Detection**: The sampler internally tracks ``bad_logden_count``. If your ``log_density`` function returns ``NaN`` or ``Inf``, the sampler will log a warning at the first occurrence and every 1000 occurrences thereafter, helping you diagnose numerical issues without immediate collapse.
 
 Tuning Tips
 ~~~~~~~~~~~
@@ -67,8 +68,8 @@ During ``run_sampling``, the terminal progress bar provides real-time updates:
 - **samples**: The number of valid samples currently held in the active sliding windows.
 - **evals**: The total cumulative number of likelihood function evaluations performed, including those from rejected trials and previously merged processes.
 - **n_proc**: The current number of active parallel processes. This naturally decreases as redundant modes are merged.
-- **logZ**: The current estimate of the log-evidence ($\ln \mathcal{Z}$).
-- **dlogZ**: The absolute difference in the log-evidence estimate compared to its value $\alpha$ iterations ago. This is used to trigger early stopping if ``stop_dlogZ`` is provided.
+- **logZ**: The current estimate of the log-evidence ($\ln \mathcal{Z}$). Returns ``NULL`` if not yet calculated.
+- **dlogZ**: The absolute difference in the log-evidence estimate compared to its value 1000 iterations ago. This is used to trigger early stopping if ``stop_dlogZ`` is provided. Returns ``NULL`` during the first 1000 iterations.
 - **max_ld**: The highest log-density (log-likelihood) value discovered so far across all active processes.
 
 Runtime Flags

@@ -199,8 +199,8 @@ During `run_sampling`, the progress bar (powered by tqdm) provides real-time upd
 *   **`samples`**: The total number of valid samples currently held in the sliding window across all active processes.
 *   **`evals`**: The total cumulative number of likelihood function evaluations performed since the start of the sampling run (including all trial points and historical processes).
 *   **`n_proc`**: The current number of active parallel processes (seeds). This number will decrease as processes merge.
-*   **`logZ`**: The current estimate of the log-evidence ($\ln \mathcal{Z}$).
-*   **`dlogZ`**: The absolute difference in the log-evidence estimate compared to the value from `alpha` iterations ago. Used for early stopping.
+*   **`logZ`**: The current estimate of the log-evidence ($\ln \mathcal{Z}$). Returns `NULL` if not yet calculated.
+*   **`dlogZ`**: The absolute difference in the log-evidence estimate compared to the value from 1000 iterations ago. Used for early stopping. Returns `NULL` during the first 1000 iterations.
 *   **`max_ld`**: The maximum log-density (log-likelihood) value found so far by the best-performing active process.
 
 ### Multiprocessing Caveats
