@@ -21,8 +21,8 @@ This adaptive–parallel design allows PARIS to efficiently discover, refine, an
 PARIS combines the exploratory power of global sampling with the precision of local adaptation.
 
 1.  **Global Exploration**: The sampler begins with **Latin Hypercube Sampling (LHS)** to uniformly cover the prior and identify promising regions.
-2.  **Local Adaptation**: Multiple parallel "seeds" explore these regions independently. Each seed builds a **local Gaussian Mixture** proposal that adapts to its own sample history, automatically focusing on high-density modes.
-3.  **Parallel Merging**: As parallel processes evolve, they monitor each other. If two seeds converge toward the same mode, they **automatically merge** to eliminate redundancy and save computational resources.
+2.  **Local Adaptation**: Multiple parallel processes explore these regions independently. Each process builds a **local Gaussian Mixture** proposal that adapts to its own sample history, automatically focusing on high-density modes.
+3.  **Parallel Merging**: As parallel processes evolve, they monitor each other. If two processes converge toward the same mode, they **automatically merge** to eliminate redundancy and save computational resources.
 4.  **Efficient Reweighting**: A **sliding window** mechanism ensures that importance weights remain accurate even in high dimensions, keeping the computational cost per iteration constant regardless of the total sample size.
 
 *For the rigorous mathematical derivation and implementation details, please refer to the [User Guide](https://mx-liu123.github.io/parismc/user/guide.html) and our paper.*
@@ -33,10 +33,10 @@ PARIS combines the exploratory power of global sampling with the precision of lo
 
 PARIS demonstrates exceptional efficiency in high-dimensional, multi-modal scenarios. In a challenging 10D GMM with 10 equally weighted modes:
 
-| Method | Sample Number | Total Calls | Log Evidence |
-|--------|---------------|-------------|--------------|
-| **PARIS** | 145,420 | **150,050** | **2.30** |
-| Dynesty | 145,423 | 8,587,847 | 2.30 |
+| Method | Sample Number | Function Evaluations | Log Evidence |
+|--------|---------------|----------------------|--------------|
+| **PARIS** | 145,420 | **160,050** | **2.30** |
+| DNS | 145,423 | 8,587,847 | 2.30 |
 | PTMCMC | 145,400 | 822,352 | 1.91 |
 
 **Key Results:**

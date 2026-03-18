@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "parismc"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
     {name = "Miaoxin Liu", email = "mx.liu123@outlook.com"},
     {name = "Alvin J. K. Chua"}

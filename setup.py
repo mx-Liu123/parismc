@@ -13,7 +13,7 @@ except FileNotFoundError:
 
 setup(
     name="parismc",
-    version="0.1.0",
+    version="0.1.1",
     author="Miaoxin Liu, Alvin J. K. Chua",
     author_email="miaoxin.liu@u.nus.edu",
     description="PARIS: Parallel Adaptive Reweighting Importance Sampling for high-dimensional multi-modal Bayesian inference",
