@@ -309,7 +309,7 @@ config = SamplerConfig(
 ### Key Methods
 
 - `prepare_lhs_samples()`: Initialize with Latin Hypercube Sampling
-- `run_sampling(num_iterations, savepath, print_iter=1, stop_dlogZ=None)`: Execute the sampling process; if `stop_dlogZ` is set, stop when `|logZ(i) - logZ(i-alpha)| <= stop_dlogZ` (checked every `alpha` iterations)
+* `run_sampling(num_iterations, savepath, print_iter=1, stop_dlogZ=None)`: Execute the sampling process; if `stop_dlogZ` is set, stop when `|logZ(i) - logZ(i-1000)| <= stop_dlogZ` (checked every 1000 iterations)
 - `get_samples_with_weights()`: Retrieve samples and importance weights
 - `save_state()` / `load_state()`: State persistence
 

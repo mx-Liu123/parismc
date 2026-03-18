@@ -349,7 +349,7 @@ config = SamplerConfig(
         </ul>
 
         <h5>run_sampling(num_iterations, savepath, print_iter=1, stop_dlogZ=None)</h5>
-        <p>Execute the main sampling loop; if <code>stop_dlogZ</code> is set, sampling stops when <code>|logZ(i) - logZ(i-alpha)|</code> is below the threshold (checked every <code>alpha</code> iterations).</p>
+        <p>Execute the main sampling loop; if <code>stop_dlogZ</code> is set, sampling stops when <code>|logZ(i) - logZ(i-1000)|</code> is below the threshold (checked every 1000 iterations).</p>
         <ul>
             <li><strong>num_iterations</strong> (int): Number of sampling iterations to run.</li>
             <li><strong>savepath</strong> (str): Directory path for saving intermediate results.</li>
