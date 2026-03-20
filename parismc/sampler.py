@@ -287,10 +287,15 @@ class Sampler:
             # Check for problematic values
             bad_mask = ~np.isfinite(lhs_log_densities[i:end])
             if np.any(bad_mask):
-                for _ in range(np.sum(bad_mask)):
+                bad_indices = np.where(bad_mask)[0]
+                for idx in bad_indices:
                     self.bad_logden_count += 1
                     if self.bad_logden_count == 1 or self.bad_logden_count % 1000 == 0:
+                        u_point = x[i + idx]
+                        phys_point = self.apply_prior_transform(u_point[None, :], self.prior_transform)[0]
                         logger.warning(f"Detected problematic log_density (NaN or Inf) {self.bad_logden_count} times. Check your implementation.")
+                        logger.warning(f"  Normalized point: {u_point}")
+                        logger.warning(f"  Unnormalized point: {phys_point}")
             
         self.lhs_points_initial = x
         self.lhs_log_densities = lhs_log_densities
@@ -1154,10 +1159,15 @@ class Sampler:
             # Check for problematic values
             bad_mask = ~np.isfinite(final_log_densities)
             if np.any(bad_mask):
-                for _ in range(np.sum(bad_mask)):
+                bad_indices = np.where(bad_mask)[0]
+                for idx in bad_indices:
                     self.bad_logden_count += 1
                     if self.bad_logden_count == 1 or self.bad_logden_count % 1000 == 0:
+                        u_point = final_points[idx]
+                        phys_point = self.apply_prior_transform(u_point[None, :], self.prior_transform)[0]
                         logger.warning(f"Detected problematic log_density (NaN or Inf) {self.bad_logden_count} times. Check your implementation.")
+                        logger.warning(f"  Normalized point: {u_point}")
+                        logger.warning(f"  Unnormalized point: {phys_point}")
 
             # Update State
             self.call_num_list[j][ind1:ind2] += calls_added
