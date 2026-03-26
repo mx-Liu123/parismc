@@ -178,9 +178,14 @@ class Sampler:
         self.init_cov_list = init_cov_list
         self.config = config
         
-        # Set seed
-        if config.seed is not None:
-            np.random.seed(config.seed)
+        # Ensure a concrete seed exists even if None was provided.
+        # This provides transparency and allows 100% reproducibility in saved states.
+        if config.seed is None:
+            config.seed = np.random.randint(0, 2**31 - 1)
+            logger.info(f"No seed provided. Automatically generated and using seed: {config.seed}")
+        
+        # Explicitly fix the random state for this sampler instance.
+        np.random.seed(config.seed)
         
         # Set configuration parameters
         # Merge confidence (coverage probability) used to derive Mahalanobis threshold R_m
@@ -1182,7 +1187,7 @@ class Sampler:
             self.element_num_list[j] += self.batch_point_num
             self.max_logden_list[j] = max(self.max_logden_list[j], final_log_densities.max())
 
-    def _report_progress(self, i: int, stop_dlogZ: Optional[float], pbar: tqdm) -> bool:
+    def _report_progress(self, i: int, stop_dlogZ: Optional[float], stop_max_ld_stable_iters: Optional[int], pbar: tqdm) -> bool:
         """Calculate stats, report progress, and check stopping conditions."""
         
         # Check flags first
@@ -1263,18 +1268,42 @@ class Sampler:
             if i % self.print_iter == 0:
                 pbar.update(self.print_iter)
 
-            # Only check for early stopping if stop_dlogZ threshold was actually provided
+            # --- Check Stopping Criteria (OR Logic) ---
+            should_stop = False
+            
+            # 1. dlogZ Criterion
             if stop_dlogZ is not None and dlogZ is not None and dlogZ <= stop_dlogZ:
-                self.current_iter = i + 1
-                stop_message = f"Early stopping at iter {i}: dlogZ={dlogZ:.5e} <= stop_dlogZ={stop_dlogZ:.5e}, logZ={logZ:.5f}"
+                stop_message = f"Early stopping at iter {i}: dlogZ={dlogZ:.5e} <= stop_dlogZ={stop_dlogZ:.5e}"
                 logger.info(stop_message)
-                print(stop_message)
+                print("\n" + stop_message)
+                should_stop = True
+            
+            # 2. Maximum Log-Density Stability Criterion
+            if stop_max_ld_stable_iters is not None:
+                current_max_ld = self.max_logden_list[0]
+                if current_max_ld > self._last_max_ld:
+                    self._last_max_ld = current_max_ld
+                    self._max_ld_stable_count = 0
+                else:
+                    self._max_ld_stable_count += 1
+                
+                if self._max_ld_stable_count >= stop_max_ld_stable_iters:
+                    stop_message = f"Early stopping at iter {i}: max_ld remained stable for {self._max_ld_stable_count} iterations."
+                    logger.info(stop_message)
+                    print("\n" + stop_message)
+                    should_stop = True
+            
+            if should_stop:
+                self.current_iter = i + 1
                 return True
+        
+        return False
         
         return False
 
     def run_sampling(self, num_iterations: int, savepath: str, print_iter: int = 1,
                  stop_dlogZ: Optional[float] = None,
+                 stop_max_ld_stable_iters: Optional[int] = None,
                  external_lhs_points: Optional[np.ndarray] = None,
                  external_lhs_log_densities: Optional[np.ndarray] = None,
                  callback: Optional[Callable[['Sampler', int], None]] = None) -> None:
@@ -1289,7 +1318,10 @@ class Sampler:
         print_iter : int, optional
             Progress update cadence.
         stop_dlogZ : float, optional
-            Absolute difference threshold |logZ(i) - logZ(i-alpha)| to trigger early stopping;
+            Absolute difference threshold |logZ(i) - logZ(i-1000)| to trigger early stopping;
+            disabled when None.
+        stop_max_ld_stable_iters : int, optional
+            Stop sampling if the maximum log-density remains unchanged for this many iterations;
             disabled when None.
         callback : callable, optional
             Function called at the start of each iteration.
@@ -1321,9 +1353,14 @@ class Sampler:
             self._last_logZ_for_stop = None
             self._last_logZ_iter = None
             self._last_dlogZ = None
+            self._last_max_ld = -np.inf
+            self._max_ld_stable_count = 0
         else:
             # If resuming from a previous run, check if arrays need to be extended
             self._extend_arrays_if_needed(num_iterations)
+            # Ensure attributes exist for resume cases
+            if not hasattr(self, '_last_max_ld'): self._last_max_ld = -np.inf
+            if not hasattr(self, '_max_ld_stable_count'): self._max_ld_stable_count = 0
         
         try:
             pbar = tqdm(total=num_iterations, initial=0, desc="Sampling")
@@ -1368,7 +1405,7 @@ class Sampler:
                     print(f"DEBUG: Generated LogDen[0]: {self.searched_log_densities_list[0][self.element_num_list[0]-1]}")
 
                 # Report progress and check stopping condition
-                if self._report_progress(i, stop_dlogZ, pbar):
+                if self._report_progress(i, stop_dlogZ, stop_max_ld_stable_iters, pbar):
                     break
 
                 self.current_iter += 1

@@ -309,7 +309,10 @@ config = SamplerConfig(
 ### Key Methods
 
 - `prepare_lhs_samples()`: Initialize with Latin Hypercube Sampling
-* `run_sampling(num_iterations, savepath, print_iter=1, stop_dlogZ=None)`: Execute the sampling process; if `stop_dlogZ` is set, stop when `|logZ(i) - logZ(i-1000)| <= stop_dlogZ` (checked every 1000 iterations)
+* `run_sampling(num_iterations, savepath, print_iter=1, stop_dlogZ=None, stop_max_ld_stable_iters=None)`: Execute the sampling process. Supports two early stopping criteria (OR logic):
+    - `stop_dlogZ`: Triggered if the log-evidence change over 1000 iterations is below this threshold.
+    - `stop_max_ld_stable_iters`: Triggered if the maximum log-density remains unchanged for this many iterations (indicating the sampler has reached a plateau).
+    - Note that `logZ` is estimated using the latter 50% of the sample set.
 - `get_samples_with_weights()`: Retrieve samples and importance weights
 - `save_state()` / `load_state()`: State persistence
 

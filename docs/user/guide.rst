@@ -33,6 +33,27 @@ Tuning Tips
 - **init_cov_list** (:math:`\Sigma_{\text{init}}`): Initial covariance for each process. Use a conservative small estimate of mode size, or the inverse Fisher matrix when available. On a unit cube, :math:`\text{diag}((0.05\text{--}0.1)^2)` per dimension is a reasonable start.
 - **Less sensitive**: :math:`\alpha` and :math:`\gamma` are typically robust. Defaults often suffice; try :math:`\alpha=10000` for a safe, general setting.
 
+Early Stopping Criteria
+-----------------------
+
+PARIS supports two independent criteria for early stopping. If both are provided, the sampler will stop as soon as **either** condition is met (OR logic).
+
+Evidence Stability (``stop_dlogZ``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This criterion monitors the change in the log-evidence estimate. Every 1000 iterations, the sampler compares the current :math:`\ln \mathcal{Z}` with the value from 1000 iterations ago.
+
+- If :math:`|\ln \mathcal{Z}_i - \ln \mathcal{Z}_{i-1000}| \le \text{stop\_dlogZ}`, the sampler stops.
+- This is useful for ensuring the overall distribution has reached a stationary state.
+
+Log-Density Plateau (``stop_max_ld_stable_iters``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This criterion monitors the global maximum log-density (the best point found so far).
+
+- If the maximum log-density fails to improve for a consecutive number of iterations equal to ``stop_max_ld_stable_iters``, the sampler stops.
+- This indicates that the sampler has likely reached the peak of the modes and is no longer discovering better regions.
+
 Using Prior Transforms
 ----------------------
 
