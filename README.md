@@ -2,6 +2,8 @@
 
 **An efficient adaptive importance sampler for high-dimensional multi-modal Bayesian inference.**
 
+*Read the paper on arXiv: [arXiv:2603.21249](https://arxiv.org/abs/2603.21249)*
+
 PARIS (**Parallel Adaptive Reweighting Importance Sampling**) combines global exploration with local adaptation to tackle complex posteriors. The workflow is simple:
 
 1. **Global Initialization**: Start with a space-filling design (e.g. Latin Hypercube Sampling) to seed promising regions.
