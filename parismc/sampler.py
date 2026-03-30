@@ -1268,34 +1268,32 @@ class Sampler:
             if i % self.print_iter == 0:
                 pbar.update(self.print_iter)
 
-            # --- Check Stopping Criteria (OR Logic) ---
-            should_stop = False
-            
-            # 1. dlogZ Criterion
+            # 1. dlogZ Criterion (Depends on periodic calculation)
             if stop_dlogZ is not None and dlogZ is not None and dlogZ <= stop_dlogZ:
                 stop_message = f"Early stopping at iter {i}: dlogZ={dlogZ:.5e} <= stop_dlogZ={stop_dlogZ:.5e}"
                 logger.info(stop_message)
                 print("\n" + stop_message)
                 should_stop = True
             
-            # 2. Maximum Log-Density Stability Criterion
-            if stop_max_ld_stable_iters is not None:
-                current_max_ld = self.max_logden_list[0]
-                if current_max_ld > self._last_max_ld:
-                    self._last_max_ld = current_max_ld
-                    self._max_ld_stable_count = 0
-                else:
-                    self._max_ld_stable_count += 1
-                
-                if self._max_ld_stable_count >= stop_max_ld_stable_iters:
-                    stop_message = f"Early stopping at iter {i}: max_ld remained stable for {self._max_ld_stable_count} iterations."
-                    logger.info(stop_message)
-                    print("\n" + stop_message)
-                    should_stop = True
+        # 2. Maximum Log-Density Stability Criterion (Must check every iteration)
+        if stop_max_ld_stable_iters is not None:
+            # Use max() to be safe against any temporary sorting inconsistency
+            current_max_ld = max(self.max_logden_list)
+            if current_max_ld > self._last_max_ld:
+                self._last_max_ld = current_max_ld
+                self._max_ld_stable_count = 0
+            else:
+                self._max_ld_stable_count += 1
             
-            if should_stop:
-                self.current_iter = i + 1
-                return True
+            if self._max_ld_stable_count >= stop_max_ld_stable_iters:
+                stop_message = f"Early stopping at iter {i}: max_ld remained stable for {self._max_ld_stable_count} iterations."
+                logger.info(stop_message)
+                print("\n" + stop_message)
+                should_stop = True
+        
+        if should_stop:
+            self.current_iter = i + 1
+            return True
         
         return False
         
