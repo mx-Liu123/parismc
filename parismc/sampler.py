@@ -75,6 +75,9 @@ class SamplerConfig:
         Numerical jitter added to covariance diagonal for stability (epsilon).
     keep_dead_processes : bool
         If True, trimmed histories of dead/merged processes are archived to save memory but kept for analysis.
+    terminate_proc_condition : callable, optional
+        A user-defined function to determine if a specific process should be terminated.
+        Signature: callback(sampler, proc_idx) -> bool
     debug : bool
         Enable debug logging.
     """
@@ -93,6 +96,7 @@ class SamplerConfig:
     merge_type: str = 'single' # 'distance', 'single', or 'multiple'
     cov_jitter: float = 1e-10
     keep_dead_processes: bool = False
+    terminate_proc_condition: Optional[Callable] = None
     debug: bool = False
 
 class Sampler:
@@ -537,6 +541,11 @@ class Sampler:
                 log_det_cov = self.gaussian_normterm_list[i][0]
                 logger.warning('Negative or close to zero determinant covariance matrix')
             self.now_normterms.append(np.exp(-0.5 * log_det_cov) / np.sqrt((2 * np.pi) ** self.ndim))
+
+        # Stability trackers for individual processes
+        self._proc_last_max_ld = [-np.inf] * self.n_seed
+        self._proc_max_ld_stable_count = [0] * self.n_seed
+
         self.current_iter = 0
 
     def _extend_arrays_if_needed(self, num_iterations: int) -> None:
@@ -636,7 +645,8 @@ class Sampler:
             'searched_log_densities_list', 'means_list', 'inv_covariances_list',
             'gaussian_normterm_list', 'call_num_list', 'rej_num_list',
             'wcoeff_list', 'wdeno_list', 'element_num_list',
-            'now_covariances', 'now_normterms', 'proposalcoeff_list'
+            'now_covariances', 'now_normterms', 'proposalcoeff_list',
+            '_proc_last_max_ld', '_proc_max_ld_stable_count'
         ]
         
         # 3. Apply sorting to each attribute
@@ -730,6 +740,32 @@ class Sampler:
         new_clusters.sort(key=lambda c: c[0])
         return new_clusters
 
+    def _archive_single_process(self, j: int) -> None:
+        """Helper to archive a single process's history."""
+        element_num = self.element_num_list[j]
+        if element_num > 0:
+            compact_points = self.searched_points_list[j][:element_num].copy()
+            compact_logdens = self.searched_log_densities_list[j][:element_num].copy()
+            compact_wdeno = self.wdeno_list[j][:element_num].copy()
+            
+            # Finalize wdeno for the last batch
+            latest_batch_start = element_num - self.batch_point_num
+            if latest_batch_start >= 0 and latest_batch_start < element_num:
+                latest_points = compact_points[latest_batch_start:element_num]
+                latest_cov_idx = int((element_num - 1) / self.cov_update_count)
+                inv_cov = self.inv_covariances_list[j][latest_cov_idx]
+                norm_term = self.gaussian_normterm_list[j][latest_cov_idx]
+                all_means = self.means_list[j][:latest_batch_start]
+                all_proposalcoeffs = self.proposalcoeff_list[j][:latest_batch_start]
+                
+                if len(all_means) > 0:
+                    latest_denos = weighting_seeds_manypoint(latest_points, all_means, inv_cov, norm_term, all_proposalcoeffs)
+                    compact_wdeno[latest_batch_start:element_num] = latest_denos
+                
+            self.archived_points.append(compact_points)
+            self.archived_log_densities.append(compact_logdens)
+            self.archived_wdeno.append(compact_wdeno)
+
     def _merge_processes(self, i: int) -> bool:
         """
         Sort processes and merge clusters.
@@ -749,40 +785,40 @@ class Sampler:
         else:
             cluster_indices = self._find_clusters_by_weight()
 
+        # 2b. Apply custom termination condition if provided
+        if getattr(self.config, 'terminate_proc_condition', None) is not None:
+            survivor_clusters = []
+            for cluster in cluster_indices:
+                leader_idx = cluster[0]
+                if self.config.terminate_proc_condition(self, leader_idx):
+                    # Terminate this cluster (process)
+                    logger.info(f"Process {leader_idx} terminated by custom condition at iteration {i}")
+                    
+                    # Archive if configured (using logic from step 3 below manually)
+                    if getattr(self, 'keep_dead_processes', False):
+                        for j in cluster:
+                            element_num = self.element_num_list[j]
+                            if element_num > 0:
+                                self._archive_single_process(j)
+                else:
+                    survivor_clusters.append(cluster)
+            cluster_indices = survivor_clusters
+
         # 3. Archive dead processes if configured
         if getattr(self, 'keep_dead_processes', False):
+            # Only the leader (cluster[0]) of each survivor cluster survives
             survivors = set([cluster[0] for cluster in cluster_indices])
+            
             for j in range(self.n_proc):
                 if j not in survivors:
-                    element_num = self.element_num_list[j]
-                    if element_num > 0:
-                        compact_points = self.searched_points_list[j][:element_num].copy()
-                        compact_logdens = self.searched_log_densities_list[j][:element_num].copy()
-                        compact_wdeno = self.wdeno_list[j][:element_num].copy()
-                        
-                        # Finalize wdeno for the last batch
-                        latest_batch_start = element_num - self.batch_point_num
-                        if latest_batch_start >= 0 and latest_batch_start < element_num:
-                            latest_points = compact_points[latest_batch_start:element_num]
-                            latest_cov_idx = int((element_num - 1) / self.cov_update_count)
-                            inv_cov = self.inv_covariances_list[j][latest_cov_idx]
-                            norm_term = self.gaussian_normterm_list[j][latest_cov_idx]
-                            all_means = self.means_list[j][:latest_batch_start]
-                            all_proposalcoeffs = self.proposalcoeff_list[j][:latest_batch_start]
-                            
-                            if len(all_means) > 0:
-                                latest_denos = weighting_seeds_manypoint(latest_points, all_means, inv_cov, norm_term, all_proposalcoeffs)
-                                compact_wdeno[latest_batch_start:element_num] = latest_denos
-                            
-                        self.archived_points.append(compact_points)
-                        self.archived_log_densities.append(compact_logdens)
-                        self.archived_wdeno.append(compact_wdeno)
+                    self._archive_single_process(j)
 
         # 4. Implement merging logic
         lists_to_merge = [
             self.wdeno_list, self.searched_points_list, self.inv_covariances_list, 
             self.gaussian_normterm_list, self.means_list, self.call_num_list, 
-            self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list
+            self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list,
+            self._proc_last_max_ld, self._proc_max_ld_stable_count
         ]
         
         merged_lists, self.searched_log_densities_list = merge_arrays(
@@ -792,7 +828,8 @@ class Sampler:
         
         (self.wdeno_list, self.searched_points_list, self.inv_covariances_list, 
          self.gaussian_normterm_list, self.means_list, self.call_num_list, 
-         self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list) = merged_lists
+         self.rej_num_list, self.wcoeff_list, self.proposalcoeff_list,
+         self._proc_last_max_ld, self._proc_max_ld_stable_count) = merged_lists
          
         self.max_logden_list = merge_max_list(self.max_logden_list, cluster_indices)
         self.element_num_list = merge_element_num_list(self.element_num_list, cluster_indices)
@@ -1199,6 +1236,7 @@ class Sampler:
         compute_logZ = (i % self.print_iter == 0) or (i % self.STABILITY_CHECK_INTERVAL == 0)
         logZ = None
         dlogZ = None
+        should_stop = False
         
         if compute_logZ:
             c_term = self.loglike_normalization
@@ -1396,6 +1434,15 @@ class Sampler:
     
                 # Generate new points
                 self._generate_new_points(i, points_list, probabilities_list)
+
+                # Update process-level stability trackers
+                for j in range(self.n_proc):
+                    current_max = self.max_logden_list[j]
+                    if current_max > self._proc_last_max_ld[j]:
+                        self._proc_last_max_ld[j] = current_max
+                        self._proc_max_ld_stable_count[j] = 0
+                    else:
+                        self._proc_max_ld_stable_count[j] += 1
 
                 if self.debug and i == 0:
                     print(f"DEBUG: After Generation")
