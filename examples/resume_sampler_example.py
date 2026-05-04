@@ -127,7 +127,7 @@ def main():
     try:
         import numpy as np
         samples, weights = sampler.get_samples_with_weights(flatten=True)
-        ess = 1.0 / (weights ** 2).sum()
+        ess = (weights.sum()**2) / (weights ** 2).sum()
         wmean = (samples * weights[:, None]).sum(axis=0) / weights.sum()
         print("\nQuick analysis")
         print("--------------")

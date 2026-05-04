@@ -1189,8 +1189,10 @@ class Sampler:
 
     def _report_progress(self, i: int, stop_dlogZ: Optional[float], stop_max_ld_stable_iters: Optional[int], pbar: tqdm) -> bool:
         """Calculate stats, report progress, and check stopping conditions."""
-        
+        should_stop = False
+
         # Check flags first
+
         try:
             self._check_flags_and_take_actions()
         except Exception as e:

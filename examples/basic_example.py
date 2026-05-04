@@ -73,7 +73,7 @@ def main():
     # Basic analysis
     print(f"\nResults Summary:")
     print(f"Total samples: {len(samples)}")
-    print(f"Effective sample size: {1/np.sum(weights**2):.1f}")
+    print(f"Effective sample size: {(np.sum(weights)**2)/np.sum(weights**2):.1f}")
     
     # Weighted statistics
     weighted_mean = np.average(samples, weights=weights, axis=0)

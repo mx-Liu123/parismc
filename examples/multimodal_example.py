@@ -117,7 +117,7 @@ def analyze_results(sampler, savepath):
     
     # Basic statistics
     print(f"Total samples generated: {len(samples):,}")
-    print(f"Effective sample size: {1/np.sum(weights**2):.1f}")
+    print(f"Effective sample size: {(np.sum(weights)**2)/np.sum(weights**2):.1f}")
     print(f"Weight coefficient of variation: {np.std(weights)/np.mean(weights):.3f}")
     
     # Transform samples to the coordinate system used in log_density
